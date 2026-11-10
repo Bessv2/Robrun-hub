@@ -5,5 +5,4 @@ compatibility_date = "2026-10-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "robrun-hub"
-# Placeholder until Phase 3: replace with the id printed by `npx wrangler d1 create robrun-hub`.
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "92aca496-3423-4bbe-b154-38f2327fa01f"
