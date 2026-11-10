@@ -70,7 +70,12 @@ function showLogin(devLogin = false) {
       <h1>Rob Run Clan Hub</h1>
       <p class="muted">Members of the clan Discord server only.</p>
       <a class="btn discord" href="/api/auth/login">Log in with Discord</a>
-      ${devLogin ? '<a class="btn ghost" href="/api/auth/dev">Dev login (local only)</a>' : ''}
+      ${devLogin ? `
+        <a class="btn ghost" href="/api/auth/dev">Dev login (local only)</a>
+        <form action="/api/auth/dev" method="get" class="row">
+          <input name="as" maxlength="32" placeholder="or test as a member, e.g. Alice" aria-label="Test member name" class="grow">
+          <button class="btn ghost small">Go</button>
+        </form>` : ''}
     </section>`;
 }
 
@@ -167,77 +172,153 @@ async function renderStatus() {
 // ------------------------------------------------------------------------------------------
 // Progress
 
-const progressFilter = { q: '', show: 'all', cat: '' };
+const progressFilter = { q: '', show: 'all', cat: '', who: null };
+
+// Upward/downward walk of Larry's Tree, mirroring treeWalk() in the API.
+function treeWalk(nodes, start, direction) {
+  const next = {};
+  for (const n of nodes) {
+    for (const req of n.requires ? n.requires.split(',') : []) {
+      if (direction === 'up') (next[n.id] ??= []).push(req);
+      else (next[req] ??= []).push(n.id);
+    }
+  }
+  const seen = new Set();
+  const stack = [...(next[start] ?? [])];
+  while (stack.length) {
+    const id = stack.pop();
+    if (!seen.has(id)) { seen.add(id); stack.push(...(next[id] ?? [])); }
+  }
+  return [...seen];
+}
 
 async function renderProgress() {
   const data = await api('GET', 'progress');
   const names = Object.fromEntries(data.members.map((m) => [m.id, m.name]));
-  const nodeName = Object.fromEntries(data.nodes.map((n) => [n.id, n.name]));
+  const nodeById = Object.fromEntries(data.nodes.map((n) => [n.id, n]));
   const cats = [...new Set(data.nodes.map((n) => n.category))];
-  const mineCount = data.nodes.filter((n) => n.mine).length;
-  const clanCount = data.nodes.filter((n) => n.have.length).length;
+  if (!names[progressFilter.who]) progressFilter.who = me.id;
 
   view.innerHTML = `
     <section class="card">
-      <h2>Larry's Tree this wipe</h2>
-      <div class="stats">
-        <div><b>${esc(mineCount)}</b><span>researched by you</span></div>
-        <div><b>${esc(clanCount)}</b><span>researched by someone in the clan</span></div>
-        <div><b>${esc(data.nodes.length - clanCount)}</b><span>nobody has yet</span></div>
+      <div class="row wrap spread">
+        <h2>Who has unlocked what</h2>
+        <span class="muted small">Wipe #${esc(data.wipe.id)} · resets when an admin starts the next wipe</span>
       </div>
+      <div class="stats" id="p-stats"></div>
+      <ul class="roster" id="p-roster" aria-label="Clan members"></ul>
+    </section>
+    <section class="card">
+      <h2 id="p-title"></h2>
+      <p class="muted small" id="p-help"></p>
       <div class="row wrap filters">
-        <input type="search" id="p-q" placeholder="Search nodes" value="${esc(progressFilter.q)}">
+        <input type="search" id="p-q" placeholder="Search nodes, e.g. Chemical Reactor" value="${esc(progressFilter.q)}">
         <select id="p-cat"><option value="">All branches</option>${cats.map((c) => `<option ${c === progressFilter.cat ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
         <select id="p-show">
-          ${[['all', 'All nodes'], ['mine', 'Mine'], ['notmine', 'Not mine yet'], ['nobody', 'Nobody has it']].map(([v, l]) => `<option value="${v}" ${v === progressFilter.show ? 'selected' : ''}>${l}</option>`).join('')}
+          ${[['all', 'All nodes'], ['has', 'Unlocked'], ['missing', 'Not unlocked yet'], ['nobody', 'Nobody in the clan has it']].map(([v, l]) => `<option value="${v}" ${v === progressFilter.show ? 'selected' : ''}>${l}</option>`).join('')}
         </select>
       </div>
-      <p class="muted small">Tick what you have researched. Progress resets when an admin starts the next wipe.</p>
     </section>
     <div id="p-list"></div>`;
 
+  const whoNames = (ids) => {
+    const list = ids.map((id) => names[id] ?? id).sort((a, b) => a.localeCompare(b));
+    if (!list.length) return '<span class="muted">nobody yet</span>';
+    const shown = list.slice(0, 3).map((n) => `<span class="chip">${esc(n)}</span>`).join('');
+    return shown + (list.length > 3 ? `<span class="chip more" title="${esc(list.join(', '))}">+${esc(list.length - 3)}</span>` : '');
+  };
+
   const draw = () => {
+    const who = progressFilter.who;
+    const isMe = who === me.id;
+    const canEdit = isMe || data.canEditOthers;
+    const whoName = names[who] ?? 'Unknown';
+    const total = data.nodes.length;
+    const count = (id) => data.nodes.filter((n) => n.have.includes(id)).length;
+    const clanCount = data.nodes.filter((n) => n.have.length).length;
+
+    $('#p-stats').innerHTML = `
+      <div><b>${esc(count(me.id))}/${esc(total)}</b><span>unlocked by you</span></div>
+      <div><b>${esc(clanCount)}</b><span>unlocked by someone in the clan</span></div>
+      <div><b>${esc(total - clanCount)}</b><span>nobody has yet</span></div>`;
+
+    $('#p-roster').innerHTML = data.members.map((m) => {
+      const c = count(m.id);
+      return `
+        <li><button class="member-pick ${m.id === who ? 'on' : ''}" data-who="${esc(m.id)}" aria-pressed="${m.id === who}">
+          <span class="row"><strong>${esc(m.name)}</strong>${m.id === me.id ? '<span class="tag">you</span>' : ''}</span>
+          <span class="bar" style="--p:${esc(Math.round((c / total) * 100))}%"></span>
+          <span class="muted small">${esc(c)} of ${esc(total)} unlocked${m.last_tick ? ` · updated ${esc(ago(m.last_tick))}` : ''}</span>
+        </button></li>`;
+    }).join('');
+
+    $('#p-title').innerHTML = `${isMe ? 'Your unlocks' : `${esc(whoName)}'s unlocks`} <span class="muted">${esc(count(who))} of ${esc(total)}</span>`;
+    $('#p-help').textContent = isMe
+      ? 'Tick each node you have researched. Ticking a node also ticks the nodes it requires.'
+      : canEdit
+        ? `You are an admin, so you can tick nodes for ${whoName}.`
+        : `Read only: only ${whoName} or an admin can change this list.`;
+
     const q = progressFilter.q.toLowerCase();
-    const shown = data.nodes.filter((n) =>
-      (!q || n.name.toLowerCase().includes(q)) &&
-      (!progressFilter.cat || n.category === progressFilter.cat) &&
-      (progressFilter.show === 'all' || (progressFilter.show === 'mine' && n.mine) || (progressFilter.show === 'notmine' && !n.mine) || (progressFilter.show === 'nobody' && !n.have.length)));
+    const shown = data.nodes.filter((n) => {
+      const has = n.have.includes(who);
+      return (!q || n.name.toLowerCase().includes(q)) &&
+        (!progressFilter.cat || n.category === progressFilter.cat) &&
+        (progressFilter.show === 'all' || (progressFilter.show === 'has' && has) || (progressFilter.show === 'missing' && !has) || (progressFilter.show === 'nobody' && !n.have.length));
+    });
     const groups = {};
     for (const n of shown) (groups[n.category] ??= []).push(n);
     $('#p-list').innerHTML = Object.keys(groups).length ? Object.entries(groups).map(([cat, nodes]) => `
       <section class="card">
-        <h3>${esc(cat)} <span class="muted">${esc(nodes.filter((n) => n.mine).length)}/${esc(nodes.length)}</span></h3>
+        <h3>${esc(cat)} <span class="muted">${esc(data.nodes.filter((n) => n.category === cat && n.have.includes(who)).length)}/${esc(data.nodes.filter((n) => n.category === cat).length)}</span></h3>
         <ul class="nodes">
           ${nodes.map((n) => `
-            <li>
+            <li class="${n.have.includes(who) ? 'has' : ''}">
               <label class="check">
-                <input type="checkbox" data-node="${esc(n.id)}" ${n.mine ? 'checked' : ''}>
+                <input type="checkbox" data-node="${esc(n.id)}" ${n.have.includes(who) ? 'checked' : ''} ${canEdit ? '' : 'disabled'}>
                 <span class="rar" style="--r:${esc(RARITY[n.rarity] ?? '#fff')}"></span>
                 <span class="nname">${esc(n.name)}</span>
               </label>
               <span class="meta">
                 <span class="tier">${esc(TIER[n.tier] ?? '—')}</span>
                 <span title="Research cost">${esc(money(n.research_cost))}</span>
-                ${n.requires ? `<span class="muted small" title="Requires">needs ${esc(n.requires.split(',').map((r) => nodeName[r] ?? r).join(', '))}</span>` : ''}
+                ${n.requires ? `<span class="muted small">needs ${esc(n.requires.split(',').map((r) => nodeById[r] ? `${nodeById[r].name}${nodeById[r].tier ? ' ' + TIER[nodeById[r].tier] : ''}` : r).join(', '))}</span>` : ''}
               </span>
-              <span class="who" title="${esc(n.have.map((id) => names[id] ?? id).join(', '))}">${n.have.length ? `${esc(n.have.length)} 👤` : ''}</span>
+              <span class="who">${whoNames(n.have)}</span>
             </li>`).join('')}
         </ul>
       </section>`).join('') : '<p class="muted card">No nodes match.</p>';
   };
   draw();
 
+  $('#p-roster').onclick = (e) => {
+    const b = e.target.closest('[data-who]');
+    if (!b) return;
+    progressFilter.who = b.dataset.who;
+    draw();
+  };
   $('#p-q').oninput = (e) => { progressFilter.q = e.target.value; draw(); };
   $('#p-cat').onchange = (e) => { progressFilter.cat = e.target.value; draw(); };
   $('#p-show').onchange = (e) => { progressFilter.show = e.target.value; draw(); };
   $('#p-list').onchange = async (e) => {
     const box = e.target.closest('input[data-node]');
     if (!box) return;
-    const node = data.nodes.find((n) => n.id === box.dataset.node);
+    const who = progressFilter.who;
+    const node = nodeById[box.dataset.node];
+    if (!box.checked) {
+      const dependents = treeWalk(data.nodes, node.id, 'down').filter((id) => nodeById[id]?.have.includes(who));
+      if (dependents.length && !confirm(`Unticking ${node.name} also unticks what needs it: ${dependents.map((id) => nodeById[id].name).join(', ')}. Continue?`)) {
+        box.checked = true;
+        return;
+      }
+    }
     try {
-      await api('PUT', 'progress', { item_id: node.id, done: box.checked });
-      node.mine = box.checked;
-      node.have = box.checked ? [...node.have, me.id] : node.have.filter((id) => id !== me.id);
+      const r = await api('PUT', 'progress', { item_id: node.id, done: box.checked, member_id: who });
+      for (const id of r.added) nodeById[id]?.have.push(who);
+      for (const id of r.removed) if (nodeById[id]) nodeById[id].have = nodeById[id].have.filter((x) => x !== who);
+      const extra = (r.added.length || r.removed.length) - 1;
+      if (extra > 0) toast(r.added.length ? `Also ticked ${extra} required node${extra > 1 ? 's' : ''}` : `Also unticked ${extra} node${extra > 1 ? 's' : ''} that needed it`);
+      draw();
     } catch (err) {
       box.checked = !box.checked;
       fail(err);

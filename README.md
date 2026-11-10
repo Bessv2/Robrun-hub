@@ -6,7 +6,7 @@ server get in) and share:
 | Tab | What it does |
 | --- | --- |
 | **Status** | Who is online, at base, raiding or farming this wipe, with a short note. |
-| **Progress** | Each member ticks the Larry's Tree nodes they have researched; see what the clan already has and what nobody has yet. |
+| **Progress** | Who has unlocked what. Each member ticks the Larry's Tree nodes they have researched (ticking a node also ticks what it requires). Pick any member on the roster to see their unlocks; every node lists who has it. Admins can tick on a member's behalf. Resets each wipe. |
 | **Money** | Ranks the three businesses (Chemical Laboratory, Grow Room, Contraband repack) by $/hour with setup cost and payback, from game prices plus clan-measured model inputs. |
 | **Wipe planner** | Goals for this wipe, optionally linked to a tree node and assigned to a member. Admins start the next wipe here. |
 | **Items** | Every tree node and business good with its price. Members can correct a price; edits are shared and survive data refreshes. |
@@ -28,7 +28,7 @@ npm run db:local     # build seed.sql, load schema + seed into a local D1 databa
 npm run dev          # http://localhost:8788
 ```
 
-Open http://localhost:8788 and click **Dev login (local only)**. `npm run dev` turns dev login on
+Open http://localhost:8788 and click **Dev login (local only)** (an admin), or type a name to log in as an ordinary test member, so you can try the hub as several people. `npm run dev` turns dev login on
 with a command-line binding; it only works on localhost and is never set in production.
 
 With `npm run dev` running, in another terminal:
@@ -131,10 +131,10 @@ ingest hook.
 | Route | Notes |
 | --- | --- |
 | `GET /auth/login`, `GET /auth/callback`, `POST /auth/logout` | Discord OAuth (`identify guilds.members.read`) |
-| `GET /auth/dev` | Local dev login; 404 unless `DEV_LOGIN=1` on localhost |
+| `GET /auth/dev[?as=Name]` | Local dev login (admin, or a test member with `as`); 404 unless `DEV_LOGIN=1` on localhost |
 | `GET /me` | Current member, admin flag, wipe |
 | `GET/PUT /status` | Member status for this wipe |
-| `GET/PUT /progress` | Larry's Tree progress for this wipe |
+| `GET/PUT /progress` | Larry's Tree unlocks for this wipe. PUT `{item_id, done, member_id?}`: `member_id` other than your own is admin only. Returns the nodes `added` or `removed` (prerequisites and dependents cascade) |
 | `GET /income?level=1..5`, `PUT /inputs/:key` | Money model and its inputs |
 | `GET/POST /plan`, `PATCH/DELETE /plan/:id` | Wipe plan |
 | `POST /wipes` | Start the next wipe (admin) |

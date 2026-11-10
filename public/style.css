@@ -142,18 +142,31 @@ p.warn { background: #2b2210; border: 1px solid #4d3a12; border-radius: 6px; pad
 .filters input[type="search"] { flex: 1 1 200px; }
 .filters { margin-bottom: 8px; }
 .nodes { list-style: none; padding: 0; margin: 0; }
-.nodes li { display: grid; grid-template-columns: minmax(0, 1fr) auto 40px; gap: 4px 12px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
+.nodes li { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(90px, 220px); gap: 4px 12px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
 .nodes li:first-child { border-top: 0; }
 .check { display: flex; align-items: center; gap: 8px; cursor: pointer; min-width: 0; }
 .nname { overflow-wrap: anywhere; }
 .meta { display: flex; gap: 10px; align-items: baseline; justify-content: flex-end; font-size: 13px; color: var(--soft); flex-wrap: wrap; }
 .tier { display: inline-block; min-width: 2.2em; text-align: center; font-weight: 700; color: var(--muted); }
-.who { font-size: 13px; color: var(--soft); text-align: right; }
+.who { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; font-size: 12px; min-width: 0; }
+.chip { display: inline-block; padding: 1px 7px; border-radius: 99px; background: var(--card-hi); border: 1px solid var(--line); color: var(--soft); white-space: nowrap; }
+.chip.more { color: var(--muted); }
+.nodes li.has .nname { color: var(--text); font-weight: 600; }
+.nodes input:disabled { opacity: .6; cursor: default; }
+.roster { list-style: none; padding: 0; margin: 4px 0 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.member-pick {
+  display: grid; gap: 6px; width: 100%; text-align: left; padding: 10px 12px; cursor: pointer;
+  background: var(--sunk); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.member-pick:hover { border-color: var(--muted); }
+.member-pick.on { border-color: var(--accent); background: var(--card-hi); }
+.member-pick strong { overflow-wrap: anywhere; }
+.bar { display: block; height: 6px; border-radius: 99px; background: linear-gradient(90deg, var(--accent) var(--p), var(--line) var(--p)); }
 .rar { display: inline-block; width: 9px; height: 9px; border-radius: 2px; background: var(--r); flex: none; }
 @media (max-width: 640px) {
-  .nodes li { grid-template-columns: minmax(0, 1fr) 40px; }
-  .nodes .meta { grid-column: 1 / -1; justify-content: flex-start; padding-left: 26px; }
-  .nodes .who { grid-row: 1; grid-column: 2; }
+  .nodes li { grid-template-columns: minmax(0, 1fr); }
+  .nodes .meta, .nodes .who { justify-content: flex-start; padding-left: 26px; }
+  .roster { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 }
 
 /* Money -------------------------------------------------------------------------------------- */
