@@ -170,10 +170,16 @@ async function sessionMember(ctx) {
     .bind(await sha256(token))
     .first();
   if (!row) return null;
-  const isAdmin = row.id === 'dev' ? devLoginOn(ctx.env, ctx.url) : adminIds(ctx.env).has(row.id);
-  if (row.id === 'dev' && !devLoginOn(ctx.env, ctx.url)) return null;
+  if (isDevId(row.id) && !devLoginOn(ctx.env, ctx.url)) return null;
+  const isAdmin = isDevId(row.id) ? row.id === 'dev' : adminIds(ctx.env).has(row.id);
   return { ...row, isAdmin };
 }
+
+// Local dev accounts: "dev" (admin) and "dev:<name>" (ordinary members, for testing several people).
+const isDevId = (id) => id === 'dev' || String(id).startsWith('dev:');
+// SQL condition that hides dev accounts unless dev login is on. Bind devFlag(ctx) to the "?".
+const MEMBER_VISIBLE = `(? = 1 OR (m.id != 'dev' AND m.id NOT LIKE 'dev:%'))`;
+const devFlag = (ctx) => (devLoginOn(ctx.env, ctx.url) ? 1 : 0);
 
 async function requireMember(ctx) {
   const me = await sessionMember(ctx);
@@ -218,10 +224,14 @@ async function authRoutes(ctx, route) {
 
   if (route === 'GET /auth/dev') {
     if (!devLoginOn(env, url)) throw new HttpError(404, 'Not found');
-    const setCookie = await startSession(ctx, { id: 'dev', name: 'Dev user' });
+    // ?as=Name logs in as a separate non-admin test member; without it, as the admin "Dev user".
+    const as = (url.searchParams.get('as') ?? '').trim().slice(0, 32);
+    const slug = as.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const member = slug ? { id: `dev:${slug}`, name: as } : { id: 'dev', name: 'Dev user' };
+    const setCookie = await startSession(ctx, member);
     const wantsHtml = (request.headers.get('accept') ?? '').includes('text/html');
     if (wantsHtml) return new Response(null, { status: 302, headers: { location: '/', 'set-cookie': setCookie } });
-    return json({ ok: true, member: { id: 'dev', name: 'Dev user' } }, 200, { 'set-cookie': setCookie });
+    return json({ ok: true, member }, 200, { 'set-cookie': setCookie });
   }
 
   if (route === 'POST /auth/logout') {
@@ -317,9 +327,9 @@ async function getStatus(ctx) {
   const { results } = await ctx.db
     .prepare(`SELECT m.id, m.name, m.avatar, m.last_seen, s.state, s.note, s.updated_at
               FROM members m LEFT JOIN status s ON s.member_id = m.id AND s.wipe_id = ?
-              WHERE m.id != 'dev' OR m.id = ?
+              WHERE ${MEMBER_VISIBLE}
               ORDER BY CASE COALESCE(s.state, 'offline') WHEN 'offline' THEN 1 ELSE 0 END, s.updated_at DESC, m.name`)
-    .bind(ctx.wipe.id, ctx.me.id)
+    .bind(ctx.wipe.id, devFlag(ctx))
     .all();
   return json({ wipe: ctx.wipe, states: STATES, members: results.map((r) => ({ ...r, is_me: r.id === ctx.me.id })) });
 }
@@ -344,29 +354,78 @@ async function getProgress(ctx) {
     ctx.db.prepare(`SELECT id, name, category, tier, rarity, requires, research_cost,
                     COALESCE(price_override, price) AS price, sentence_years
                     FROM items WHERE kind = 'node' AND retired = 0 ORDER BY category, tier, sort`),
-    ctx.db.prepare('SELECT member_id, item_id FROM progress WHERE wipe_id = ?').bind(ctx.wipe.id),
-    ctx.db.prepare(`SELECT id, name FROM members WHERE id != 'dev' OR id = ? ORDER BY name`).bind(ctx.me.id),
+    ctx.db.prepare('SELECT member_id, item_id, updated_at FROM progress WHERE wipe_id = ?').bind(ctx.wipe.id),
+    ctx.db.prepare(`SELECT m.id, m.name, m.avatar, m.last_seen FROM members m WHERE ${MEMBER_VISIBLE} ORDER BY m.name`).bind(devFlag(ctx)),
   ]);
   const have = {};
-  for (const r of rows.results) (have[r.item_id] ??= []).push(r.member_id);
+  const lastTick = {};
+  for (const r of rows.results) {
+    (have[r.item_id] ??= []).push(r.member_id);
+    if (!lastTick[r.member_id] || r.updated_at > lastTick[r.member_id]) lastTick[r.member_id] = r.updated_at;
+  }
   return json({
     wipe: ctx.wipe,
-    members: members.results,
+    me: ctx.me.id,
+    canEditOthers: ctx.me.isAdmin,
+    members: members.results.map((m) => ({ ...m, last_tick: lastTick[m.id] ?? null })),
     nodes: nodes.results.map((n) => ({ ...n, have: have[n.id] ?? [], mine: (have[n.id] ?? []).includes(ctx.me.id) })),
   });
 }
 
+// Walk the tree from one node: up to everything it requires, or down to everything that requires it.
+export function treeWalk(nodes, start, direction) {
+  const next = {};
+  for (const n of nodes) {
+    for (const req of (n.requires ? n.requires.split(',') : [])) {
+      if (direction === 'up') (next[n.id] ??= []).push(req);
+      else (next[req] ??= []).push(n.id);
+    }
+  }
+  const seen = new Set();
+  const stack = [...(next[start] ?? [])];
+  while (stack.length) {
+    const id = stack.pop();
+    if (seen.has(id)) continue;
+    seen.add(id);
+    stack.push(...(next[id] ?? []));
+  }
+  return [...seen];
+}
+
+// Ticking a node also ticks what it requires (you cannot research it without them).
+// Unticking a node also unticks what depends on it. Members change their own list; admins anyone's.
 async function putProgress(ctx) {
   const b = await body(ctx.request);
   const id = text(b.item_id, 'item_id', 120, { required: true });
-  const node = await ctx.db.prepare(`SELECT id FROM items WHERE id = ? AND kind = 'node'`).bind(id).first();
-  if (!node) throw new HttpError(400, 'Unknown tree node');
-  if (b.done) {
-    await ctx.db.prepare('INSERT OR IGNORE INTO progress (wipe_id, member_id, item_id) VALUES (?, ?, ?)').bind(ctx.wipe.id, ctx.me.id, id).run();
-  } else {
-    await ctx.db.prepare('DELETE FROM progress WHERE wipe_id = ? AND member_id = ? AND item_id = ?').bind(ctx.wipe.id, ctx.me.id, id).run();
+  let memberId = ctx.me.id;
+  if (b.member_id != null && b.member_id !== ctx.me.id) {
+    if (!ctx.me.isAdmin) throw new HttpError(403, "Only admins can change another member's unlocks");
+    const m = await ctx.db.prepare('SELECT id FROM members WHERE id = ?').bind(String(b.member_id)).first();
+    if (!m) throw new HttpError(400, 'Unknown member');
+    memberId = m.id;
   }
-  return json({ ok: true });
+  const { results: nodes } = await ctx.db.prepare(`SELECT id, requires FROM items WHERE kind = 'node' AND retired = 0`).all();
+  if (!nodes.some((n) => n.id === id)) throw new HttpError(400, 'Unknown tree node');
+  const { results: owned } = await ctx.db
+    .prepare('SELECT item_id FROM progress WHERE wipe_id = ? AND member_id = ?')
+    .bind(ctx.wipe.id, memberId)
+    .all();
+  const has = new Set(owned.map((r) => r.item_id));
+
+  if (b.done) {
+    const added = [id, ...treeWalk(nodes, id, 'up')].filter((x) => !has.has(x));
+    if (added.length) {
+      await ctx.db.batch(added.map((x) =>
+        ctx.db.prepare('INSERT OR IGNORE INTO progress (wipe_id, member_id, item_id) VALUES (?, ?, ?)').bind(ctx.wipe.id, memberId, x)));
+    }
+    return json({ ok: true, member_id: memberId, added, removed: [] });
+  }
+  const removed = [id, ...treeWalk(nodes, id, 'down')].filter((x) => has.has(x));
+  if (removed.length) {
+    await ctx.db.batch(removed.map((x) =>
+      ctx.db.prepare('DELETE FROM progress WHERE wipe_id = ? AND member_id = ? AND item_id = ?').bind(ctx.wipe.id, memberId, x)));
+  }
+  return json({ ok: true, member_id: memberId, added: [], removed });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -526,7 +585,7 @@ async function getPlan(ctx) {
     ctx.db.prepare(`SELECT p.*, m.name AS assignee_name, i.name AS item_name FROM plan p
                     LEFT JOIN members m ON m.id = p.assignee LEFT JOIN items i ON i.id = p.item_id
                     WHERE p.wipe_id = ? ORDER BY p.done, p.sort, p.id`).bind(ctx.wipe.id),
-    ctx.db.prepare(`SELECT id, name FROM members WHERE id != 'dev' OR id = ? ORDER BY name`).bind(ctx.me.id),
+    ctx.db.prepare(`SELECT m.id, m.name FROM members m WHERE ${MEMBER_VISIBLE} ORDER BY m.name`).bind(devFlag(ctx)),
     ctx.db.prepare(`SELECT id, name, category, tier FROM items WHERE kind = 'node' AND retired = 0 ORDER BY category, tier, sort`),
     ctx.db.prepare('SELECT id, opened_at FROM wipes ORDER BY id DESC LIMIT 5'),
   ]);
