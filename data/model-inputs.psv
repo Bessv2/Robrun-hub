@@ -1,0 +1,20 @@
+# Money tab model inputs. Hand-maintained. Values here are only the starting point:
+# once the site is seeded, values edited under Money > Model inputs are kept on re-seed.
+# status: assumed | reported (one player) | measured (clan tested) | game (robrun.info game data) | unknown | setup (your choice)
+# Anything assumed, reported or unknown marks its business provisional on the Money tab.
+key|business|label|value|unit|status|how_to_measure|sort
+chem_concentrate_per_cycle|chem|Concentrate per reactor cycle|1|pcs|assumed|Load one canister, count outputs after the full load|10
+chem_canisters_per_load|chem|Canisters per reactor load|1|canisters|assumed|Note how many the reactor takes before it starts|11
+chem_freezer_ticks|chem|Freezer ticks per Concentrate (1 tick = 6 min)|5|ticks|assumed|Time one Concentrate from insert to Hard Crystals, divide by 6 minutes|12
+chem_split_uncommon|chem|Crystal quality split: Uncommon|65|%|assumed|Tally rarity over 20 or more crystals|13
+chem_split_epic|chem|Crystal quality split: Epic|25|%|assumed|Tally rarity over 20 or more crystals|14
+chem_split_legendary|chem|Crystal quality split: Legendary|10|%|assumed|Tally rarity over 20 or more crystals|15
+chem_freezer_places|chem|Freezer places (tier I)|4||assumed|robrun.info says freezers hold 4, 6 or 8; count the places on a tier I freezer|16
+chem_powder_per_crystal|chem|Powder per Hard Crystal||pcs|unknown|Crush one crystal at a Lab Table and count|17
+grow_hours_per_harvest|grow|Hours per grow harvest|1.5|hours|reported|Time one bush from harvest to next harvest, no upgrades|20
+grow_bags_per_bush|grow|Bags per bush|3|bags|reported|Average over 20 or more harvests (robrun.info: 2 to 4)|21
+grow_bushes_per_table|grow|Bushes per Grow Table|6|bushes|game|robrun.info: one table holds 6 bushes|22
+grow_tables|grow|Grow Tables you run|1|tables|setup|Your choice; the Grow Room has 6 places. Each extra table adds its price to setup|23
+repack_minutes|repack|Minutes per contraband repack|30|minutes|reported|Time one repack, no Label Printer|30
+repack_rarity_rate|repack|Rarity Cargo rate|0|%|assumed|Tally Premium vs Rarity over 20 or more repacks|31
+repack_slots|repack|Repacks running at once|1|slots|setup|Contraband Workbench has 1 base slot; Tool Boxes add more|32

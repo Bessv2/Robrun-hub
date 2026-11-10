@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="robots" content="noindex">
+  <title>Rob Run Clan Hub</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23161615'/%3E%3Ctext x='16' y='22' font-family='Arial' font-weight='900' font-size='15' text-anchor='middle' fill='%23ffd500'%3ERR%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top" id="top" hidden>
+    <div class="brand"><span class="logo">RR</span><span>Clan Hub</span></div>
+    <div class="wipe" id="wipe-info"></div>
+    <div class="me" id="me-info"></div>
+  </header>
+  <nav class="tabs" id="tabs" hidden aria-label="Sections">
+    <a href="#status" data-tab="status">Status</a>
+    <a href="#progress" data-tab="progress">Progress</a>
+    <a href="#money" data-tab="money">Money</a>
+    <a href="#plan" data-tab="plan">Wipe planner</a>
+    <a href="#items" data-tab="items">Items</a>
+    <a href="#raids" data-tab="raids">Raid alerts</a>
+  </nav>
+  <main id="view" class="view"><p class="muted">Loading…</p></main>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

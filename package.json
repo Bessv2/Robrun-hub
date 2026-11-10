@@ -1,0 +1,20 @@
+{
+  "name": "robrun-hub",
+  "private": true,
+  "type": "module",
+  "description": "ROB RUN clan hub: Cloudflare Pages + one Pages Function + D1",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "sync": "node tools/sync-robrun-info.mjs",
+    "seed:build": "node tools/make-seed.mjs",
+    "db:local": "npm run seed:build && wrangler d1 execute robrun-hub --local --file=schema.sql && wrangler d1 execute robrun-hub --local --file=seed.sql",
+    "db:remote": "npm run seed:build && wrangler d1 execute robrun-hub --remote --file=schema.sql && wrangler d1 execute robrun-hub --remote --file=seed.sql",
+    "dev": "wrangler pages dev --port 8788 --binding DEV_LOGIN=1",
+    "smoke": "bash tools/smoke.sh"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
