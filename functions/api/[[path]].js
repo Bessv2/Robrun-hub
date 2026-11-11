@@ -16,7 +16,6 @@ const SESSION_DAYS = 30;
 const WIPE_DAYS = 7;
 const DISCORD_API = 'https://discord.com/api/v10';
 
-export const STATES = ['online', 'base', 'raiding', 'farming', 'away', 'offline'];
 export const RAID_KINDS = ['defend', 'attack', 'info'];
 const INPUT_STATUSES = ['assumed', 'reported', 'measured', 'game', 'unknown', 'setup'];
 const PENDING_STATUSES = ['assumed', 'reported', 'unknown'];
@@ -71,8 +70,6 @@ export async function onRequest(context) {
     ctx.me = await requireMember(ctx);
     ctx.wipe = await currentWipe(ctx.db);
     switch (`${method} /${parts[0] ?? ''}`) {
-      case 'GET /status': return await getStatus(ctx);
-      case 'PUT /status': return await putStatus(ctx);
       case 'GET /progress': return await getProgress(ctx);
       case 'PUT /progress': return await putProgress(ctx);
       case 'GET /income': return await getIncome(ctx);
@@ -318,32 +315,6 @@ async function getMe(ctx) {
     devLogin: devLoginOn(ctx.env, ctx.url),
     wipe: me ? await currentWipe(ctx.db) : null,
   });
-}
-
-// ---------------------------------------------------------------------------------------------
-// Status
-
-async function getStatus(ctx) {
-  const { results } = await ctx.db
-    .prepare(`SELECT m.id, m.name, m.avatar, m.last_seen, s.state, s.note, s.updated_at
-              FROM members m LEFT JOIN status s ON s.member_id = m.id AND s.wipe_id = ?
-              WHERE ${MEMBER_VISIBLE}
-              ORDER BY CASE COALESCE(s.state, 'offline') WHEN 'offline' THEN 1 ELSE 0 END, s.updated_at DESC, m.name`)
-    .bind(ctx.wipe.id, devFlag(ctx))
-    .all();
-  return json({ wipe: ctx.wipe, states: STATES, members: results.map((r) => ({ ...r, is_me: r.id === ctx.me.id })) });
-}
-
-async function putStatus(ctx) {
-  const b = await body(ctx.request);
-  if (!STATES.includes(b.state)) throw new HttpError(400, `state must be one of ${STATES.join(', ')}`);
-  const note = text(b.note, 'note', 140);
-  await ctx.db
-    .prepare(`INSERT INTO status (wipe_id, member_id, state, note) VALUES (?, ?, ?, ?)
-              ON CONFLICT(wipe_id, member_id) DO UPDATE SET state = excluded.state, note = excluded.note, updated_at = datetime('now')`)
-    .bind(ctx.wipe.id, ctx.me.id, b.state, note)
-    .run();
-  return json({ ok: true });
 }
 
 // ---------------------------------------------------------------------------------------------

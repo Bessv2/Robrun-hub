@@ -5,25 +5,39 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <meta name="robots" content="noindex">
-  <title>Rob Run Clan Hub</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23161615'/%3E%3Ctext x='16' y='22' font-family='Arial' font-weight='900' font-size='15' text-anchor='middle' fill='%23ffd500'%3ERR%3C/text%3E%3C/svg%3E">
+  <title>Clan Hub</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%23c8f03c'/%3E%3Ctext x='16' y='22' font-family='Arial' font-style='italic' font-weight='900' font-size='15' text-anchor='middle' fill='%23141600'%3ECH%3C/text%3E%3C/svg%3E">
+  <link rel="preload" href="/fonts/fira-sans-extra-condensed-latin-900-italic.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <header class="top" id="top" hidden>
-    <div class="brand"><span class="logo">RR</span><span>Clan Hub</span></div>
-    <div class="wipe" id="wipe-info"></div>
-    <div class="me" id="me-info"></div>
-  </header>
-  <nav class="tabs" id="tabs" hidden aria-label="Sections">
-    <a href="#status" data-tab="status">Status</a>
-    <a href="#progress" data-tab="progress">Progress</a>
-    <a href="#money" data-tab="money">Money</a>
-    <a href="#plan" data-tab="plan">Wipe planner</a>
-    <a href="#items" data-tab="items">Items</a>
-    <a href="#raids" data-tab="raids">Raid alerts</a>
-  </nav>
-  <main id="view" class="view"><p class="muted">Loading…</p></main>
+  <div class="shell" id="shell" hidden>
+    <aside class="side" id="side">
+      <div class="brand">
+        <span class="mark" aria-hidden="true">CH</span>
+        <span class="brand-text"><b>CLAN HUB</b><small id="brand-sub">ROB RUN</small></span>
+        <button class="menu-btn" id="menu-btn" aria-expanded="false" aria-controls="side-body" aria-label="Menu">☰</button>
+      </div>
+      <div class="side-body" id="side-body">
+        <div class="me-card" id="me-card"></div>
+        <nav aria-label="Sections">
+          <p class="nav-label">Clan</p>
+          <a href="#overview" data-page="overview">Overview</a>
+          <a href="#shipments" data-page="shipments">Shipments <span class="count" id="nav-ship"></span></a>
+          <a href="#plan" data-page="plan">Wipe planner</a>
+          <p class="nav-label">Economy</p>
+          <a href="#money" data-page="money">Money</a>
+          <a href="#items" data-page="items">Items <span class="count" id="nav-items"></span></a>
+          <p class="nav-label">Tools</p>
+          <a href="#raids" data-page="raids">Raid alerts</a>
+        </nav>
+        <p class="side-foot">Game data and icons via robrun.info, a fan site. Game art belongs to its developer.</p>
+      </div>
+    </aside>
+    <main class="main" id="view"><p class="muted">Loading…</p></main>
+  </div>
+  <div id="login"></div>
+  <aside class="drawer" id="drawer" hidden aria-live="polite"></aside>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <script src="/app.js" type="module"></script>
 </body>

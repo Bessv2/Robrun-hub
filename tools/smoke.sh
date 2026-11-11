@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Smoke test for the hub API. Assumes `npm run dev` is running.
-# Logs in through /api/auth/dev, exercises status, progress, income, plan, items and raids,
+# Logs in through /api/auth/dev, exercises progress, income, plan, items and raids,
 # and fails on any non-200 response or any response body containing "error".
 #
 #   npm run smoke                      against http://localhost:8788
@@ -40,9 +40,9 @@ fi
 
 check GET  /api/auth/dev
 check GET  /api/me
-check GET  /api/status
-check PUT  /api/status '{"state":"online","note":"smoke test"}'
 check GET  /api/progress
+check GET  /data/board.json
+check GET  /img/items/meth_lab_1.webp
 check PUT  /api/progress '{"item_id":"meth_lab_1","done":true}'
 check PUT  /api/progress '{"item_id":"meth_lab_1","done":false}'
 check GET  '/api/income?level=1'
