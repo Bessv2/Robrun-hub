@@ -326,7 +326,7 @@ async function getProgress(ctx) {
                     COALESCE(price_override, price) AS price, sentence_years
                     FROM items WHERE kind = 'node' AND retired = 0 ORDER BY category, tier, sort`),
     ctx.db.prepare('SELECT member_id, item_id, updated_at FROM progress WHERE wipe_id = ?').bind(ctx.wipe.id),
-    ctx.db.prepare(`SELECT m.id, m.name, m.avatar, m.last_seen FROM members m WHERE ${MEMBER_VISIBLE} ORDER BY m.name`).bind(devFlag(ctx)),
+    ctx.db.prepare(`SELECT m.id, m.name, m.avatar, m.first_seen, m.last_seen FROM members m WHERE ${MEMBER_VISIBLE} ORDER BY m.name`).bind(devFlag(ctx)),
   ]);
   const have = {};
   const lastTick = {};
@@ -338,7 +338,7 @@ async function getProgress(ctx) {
     wipe: ctx.wipe,
     me: ctx.me.id,
     canEditOthers: ctx.me.isAdmin,
-    members: members.results.map((m) => ({ ...m, last_tick: lastTick[m.id] ?? null })),
+    members: members.results.map((m) => ({ ...m, last_tick: lastTick[m.id] ?? null, is_admin: m.id === 'dev' || adminIds(ctx.env).has(m.id) })),
     nodes: nodes.results.map((n) => ({ ...n, have: have[n.id] ?? [], mine: (have[n.id] ?? []).includes(ctx.me.id) })),
   });
 }

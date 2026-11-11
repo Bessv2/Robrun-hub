@@ -184,6 +184,38 @@ th { color: var(--muted); font: italic 800 13px/1.2 var(--display); letter-spaci
 .biz-mini b { display: block; font: italic 900 22px/1 var(--display); text-transform: uppercase; }
 .biz-mini small { color: var(--soft); }
 
+/* Clan ------------------------------------------------------------------------------------- */
+.avatar.lg { width: 52px; height: 52px; font-size: 22px; }
+.avatar.xl { width: 104px; height: 104px; font-size: 44px; border: 3px solid var(--accent); }
+.clan-tools input[type="search"] { min-width: 200px; }
+.clan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.member-card { display: grid; gap: 12px; padding: 16px 16px 0; background: var(--card); border: 1px solid var(--line); color: var(--text); }
+.member-card:hover { background: var(--card-hi); border-color: #45443f; }
+.mc-top { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.mc-name { display: grid; gap: 2px; min-width: 0; }
+.mc-name b { font: italic 900 24px/1 var(--display); text-transform: uppercase; overflow-wrap: anywhere; }
+.mc-name .badge { margin-left: 0; margin-right: 6px; }
+.mc-name span:empty { display: none; }
+.mc-name small { color: var(--muted); font-size: 12px; }
+.mc-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.mc-stats > span { display: grid; background: var(--sunk); padding: 7px 9px; color: var(--muted); font-size: 12px; }
+.mc-stats b { font: italic 900 20px/1.1 var(--display); color: var(--accent); }
+.mc-stats b small { font-size: .6em; color: var(--muted); }
+.mc-stats b.stale { color: var(--warn); font-size: 16px; }
+.member-card .bar { margin: 0 -16px; }
+.member-hero { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 22px; }
+.member-hero .kicker a { color: inherit; }
+.member-hero h1 { overflow-wrap: anywhere; }
+.member-actions { display: grid; gap: 8px; justify-items: end; max-width: 220px; text-align: right; }
+.branch-bars { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.bb { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; padding: 12px 14px 0; background: var(--card); border: 1px solid var(--line); }
+.bb-name { font: italic 800 17px/1 var(--display); text-transform: uppercase; }
+.bb-count { font: italic 900 17px/1 var(--display); color: var(--accent); }
+.bb .bar { grid-column: 1 / -1; margin: 8px -14px 0; }
+.group-title { margin: 18px 0 8px; }
+button.tile { font: inherit; cursor: pointer; }
+.tile.missing .ic { opacity: .45; filter: grayscale(.8); }
+
 /* Shipments -------------------------------------------------------------------------------- */
 body[data-page="shipments"] .main { max-width: none; gap: 14px; }
 .ship-top { display: grid; gap: 12px; }
@@ -372,6 +404,9 @@ table.inputs td:nth-child(4) { min-width: 220px; }
   .ship-top .hero-stats b { font-size: 24px; }
   .ship-tools input[type="search"] { width: 100%; flex: 1 1 140px; }
   .drawer { top: auto; max-height: 75vh; width: 100vw; border-left: 0; border-top: 3px solid var(--accent); }
+  .member-hero { grid-template-columns: auto minmax(0, 1fr); }
+  .member-actions { grid-column: 1 / -1; justify-items: start; text-align: left; max-width: none; }
+  .avatar.xl { width: 72px; height: 72px; font-size: 30px; }
 }
 @media (max-width: 520px) {
   .hide-sm { display: none; }

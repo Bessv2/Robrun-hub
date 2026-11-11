@@ -98,7 +98,9 @@ const spentFor = (p, who) => p.nodes.filter((n) => n.have.includes(who)).reduce(
 
 function updateNavCounts() {
   const p = cache.progress;
-  if (p) $('#nav-ship').textContent = `${countFor(p, me.id)}/${p.nodes.length}`;
+  if (!p) return;
+  $('#nav-ship').textContent = `${countFor(p, me.id)}/${p.nodes.length}`;
+  $('#nav-clan').textContent = p.members.length;
 }
 
 // Walk the tree up (prerequisites) or down (what depends on it). Mirrors treeWalk() in the API.
@@ -190,11 +192,14 @@ $('#menu-btn').onclick = () => {
   $('#menu-btn').setAttribute('aria-expanded', String(open));
 };
 
-const PAGES = { overview: renderOverview, shipments: renderShipments, money: renderMoney, items: renderItems, plan: renderPlan, raids: renderRaids };
+const PAGES = { overview: renderOverview, clan: renderClan, shipments: renderShipments, money: renderMoney, items: renderItems, plan: renderPlan, raids: renderRaids };
 
 async function route() {
   if (!me) return;
-  const page = PAGES[location.hash.slice(1)] ? location.hash.slice(1) : 'overview';
+  // Routes are #page or #page/argument, e.g. #clan/123456789 for one member's page.
+  const [name, ...rest] = location.hash.slice(1).split('/');
+  const page = PAGES[name] ? name : 'overview';
+  const arg = rest.length ? decodeURIComponent(rest.join('/')) : null;
   for (const a of document.querySelectorAll('#side nav a')) a.classList.toggle('on', a.dataset.page === page);
   $('#side').classList.remove('open');
   $('#menu-btn').setAttribute('aria-expanded', 'false');
@@ -202,7 +207,7 @@ async function route() {
   document.body.dataset.page = page;
   view.innerHTML = '<p class="muted pad">Loading…</p>';
   try {
-    await PAGES[page]();
+    await PAGES[page](arg);
   } catch (e) {
     if (e.message !== 'Not logged in') view.innerHTML = `<p class="bad card pad">Could not load this page: ${esc(e.message)}</p>`;
   }
@@ -288,7 +293,7 @@ async function renderOverview() {
     </section>
 
     <section>
-      <div class="sec-head"><h2>MEMBERS</h2><span class="muted small">Click a member to see their tree</span></div>
+      <div class="sec-head"><h2>MEMBERS</h2><a class="more" href="#clan">ALL MEMBERS →</a></div>
       <div class="card flush table-wrap">
         <table class="roster">
           <thead><tr><th>#</th><th>Member</th><th>Unlocked</th><th class="hide-sm">Research spent</th><th>Last update</th></tr></thead>
@@ -328,12 +333,150 @@ async function renderOverview() {
 
   view.querySelector('.roster tbody').onclick = (e) => {
     const tr = e.target.closest('tr[data-member]');
-    if (tr) { ship.who = tr.dataset.member; location.hash = '#shipments'; }
+    if (tr) location.hash = `#clan/${encodeURIComponent(tr.dataset.member)}`;
   };
   view.querySelector('.roster tbody').onkeydown = (e) => { if (e.key === 'Enter') e.target.closest('tr[data-member]')?.click(); };
   view.querySelector('.branches').onclick = (e) => { const a = e.target.closest('[data-branch]'); if (a) ship.focus = { cat: a.dataset.branch }; };
   view.querySelector('.tiles').onclick = (e) => { const a = e.target.closest('[data-node]'); if (a) { ship.who = 'clan'; ship.focus = { node: a.dataset.node }; } };
 }
+
+// ------------------------------------------------------------------------------------------
+// Clan: every member who has logged in, and one page per member
+
+const clanView = { q: '', sort: 'unlocked', memberTab: 'has' };
+const avatarHtml = (m, cls = '') => (m.avatar
+  ? `<img src="${esc(m.avatar)}" alt="" class="avatar ${cls}">`
+  : `<span class="avatar ${cls}">${esc((m.name || '?')[0].toUpperCase())}</span>`);
+const joined = (s) => { const d = parseTime(s); return d ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : ''; };
+
+async function renderClan(memberId) {
+  if (memberId) return renderMember(memberId);
+  const p = await loadProgress();
+  const total = p.nodes.length;
+  const members = p.members.map((m) => ({ ...m, count: countFor(p, m.id), spent: spentFor(p, m.id) }));
+  const newest = members.slice().sort((a, b) => String(b.first_seen).localeCompare(String(a.first_seen)))[0];
+
+  view.innerHTML = `
+    ${hero(`CLAN / ${esc(members.length)} MEMBER${members.length === 1 ? '' : 'S'}`, 'THE CLAN',
+      'Everyone who logs in with Discord joins this list automatically. Click a member to see what they have unlocked.')}
+    <div class="row wrap clan-tools">
+      <input type="search" id="c-q" placeholder="Find a member" value="${esc(clanView.q)}" aria-label="Find a member" class="grow">
+      <label class="row small">Sort
+        <select id="c-sort">
+          ${[['unlocked', 'Most unlocked'], ['name', 'Name'], ['updated', 'Recently updated'], ['joined', 'Newest members']].map(([v, l]) => `<option value="${v}" ${v === clanView.sort ? 'selected' : ''}>${l}</option>`).join('')}
+        </select>
+      </label>
+    </div>
+    <div class="clan-grid" id="c-grid"></div>
+    ${newest ? `<p class="muted small">Newest member: ${esc(newest.name)}, joined ${esc(joined(newest.first_seen))}.</p>` : ''}`;
+
+  const draw = () => {
+    const q = clanView.q.trim().toLowerCase();
+    const by = {
+      unlocked: (a, b) => b.count - a.count || a.name.localeCompare(b.name),
+      name: (a, b) => a.name.localeCompare(b.name),
+      updated: (a, b) => String(b.last_tick ?? '').localeCompare(String(a.last_tick ?? '')),
+      joined: (a, b) => String(b.first_seen).localeCompare(String(a.first_seen)),
+    }[clanView.sort];
+    const rows = members.filter((m) => !q || m.name.toLowerCase().includes(q)).sort(by);
+    $('#c-grid').innerHTML = rows.map((m) => `
+      <a class="member-card" href="#clan/${esc(encodeURIComponent(m.id))}">
+        <span class="mc-top">
+          ${avatarHtml(m, 'lg')}
+          <span class="mc-name"><b>${esc(m.name)}</b>
+            <span>${m.is_admin ? '<span class="badge">ADMIN</span>' : ''}${m.id === me.id ? '<span class="tag">YOU</span>' : ''}</span>
+            <small>Joined ${esc(joined(m.first_seen))}</small></span>
+        </span>
+        <span class="mc-stats">
+          <span><b>${esc(m.count)}<small>/${esc(total)}</small></b>unlocked</span>
+          <span><b>${esc(short$(m.spent))}</b>research</span>
+          <span><b class="${m.last_tick && daysSince(m.last_tick) <= STALE_DAYS ? '' : 'stale'}">${m.last_tick ? esc(ago(m.last_tick)) : 'never'}</b>updated</span>
+        </span>
+        <i class="bar" style="--p:${pct(m.count, total)}%"></i>
+      </a>`).join('') || '<p class="muted">No member matches that name.</p>';
+  };
+  draw();
+  $('#c-q').oninput = (e) => { clanView.q = e.target.value; draw(); };
+  $('#c-sort').onchange = (e) => { clanView.sort = e.target.value; draw(); };
+}
+
+async function renderMember(memberId) {
+  const [p, board] = await Promise.all([loadProgress(), loadBoard()]);
+  const m = p.members.find((x) => x.id === memberId);
+  if (!m) {
+    view.innerHTML = `${hero('CLAN / MEMBER', 'NOT FOUND', 'That member is not in the clan list. They appear here after they log in once.')}<p><a class="btn" href="#clan">BACK TO THE CLAN</a></p>`;
+    return;
+  }
+  for (const a of document.querySelectorAll('#side nav a')) a.classList.toggle('on', a.dataset.page === 'clan');
+  ship.who = m.id; // the details drawer then offers ticking for this member, if you are allowed to
+  const total = p.nodes.length;
+  const mine = p.nodes.filter((n) => n.have.includes(m.id));
+  const maxTier = Math.max(0, ...mine.map((n) => n.tier ?? 0));
+  const label = Object.fromEntries(board.categories.map((c) => [c.id, c.label]));
+  const branchOf = (n) => label[board.nodes[n.id]?.cat] ?? n.category;
+  const branches = board.categories.slice().sort((a, b) => a.x - b.x).map((c) => {
+    const nodes = p.nodes.filter((n) => board.nodes[n.id]?.cat === c.id);
+    return { label: c.label, id: c.id, total: nodes.length, has: nodes.filter((n) => n.have.includes(m.id)).length };
+  });
+  const editable = canEdit(m.id);
+
+  view.innerHTML = `
+    <header class="hero member-hero">
+      ${avatarHtml(m, 'xl')}
+      <div>
+        <p class="kicker"><a href="#clan">CLAN</a> / MEMBER${m.is_admin ? ' · ADMIN' : ''}</p>
+        <h1>${esc(m.name)}</h1>
+        <p class="lead">Joined ${esc(joined(m.first_seen))} · ${m.last_tick ? `unlocks last updated ${esc(ago(m.last_tick))}` : 'has not marked any unlocks yet'}${m.last_tick && daysSince(m.last_tick) > STALE_DAYS ? ' <span class="stale">(may be out of date)</span>' : ''}</p>
+        <div class="hero-stats">
+          <div><b>${esc(mine.length)}<small>/${esc(total)}</small></b><span>unlocked (${esc(pct(mine.length, total))}%)</span></div>
+          <div><b>${esc(short$(spentFor(p, m.id)))}</b><span>research spent</span></div>
+          <div><b>${esc(TIER[maxTier] || '—')}</b><span>top tier</span></div>
+        </div>
+      </div>
+      <div class="member-actions">
+        <a class="btn" href="#shipments" id="m-board">OPEN ON THE BOARD</a>
+        ${editable ? `<span class="small muted">${m.id === me.id ? 'You can' : 'As an admin you can'} change this list on the board, or click any item below.</span>` : ''}
+      </div>
+    </header>
+
+    <section>
+      <div class="sec-head"><h2>BY BRANCH</h2></div>
+      <div class="branch-bars">
+        ${branches.map((b) => `
+          <div class="bb"><span class="bb-name">${esc(b.label)}</span><span class="bb-count">${esc(b.has)}/${esc(b.total)}</span><i class="bar" style="--p:${pct(b.has, b.total)}%"></i></div>`).join('')}
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head">
+        <h2>${clanView.memberTab === 'has' ? 'UNLOCKED' : 'NOT UNLOCKED YET'}</h2>
+        <div class="seg" id="m-tab">
+          <button class="${clanView.memberTab === 'has' ? 'on' : ''}" data-tab="has">UNLOCKED ${esc(mine.length)}</button>
+          <button class="${clanView.memberTab === 'missing' ? 'on' : ''}" data-tab="missing">MISSING ${esc(total - mine.length)}</button>
+        </div>
+      </div>
+      <div id="m-items"></div>
+    </section>`;
+
+  const shown = clanView.memberTab === 'has' ? mine : p.nodes.filter((n) => !n.have.includes(m.id));
+  const groups = {};
+  for (const n of shown) (groups[branchOf(n)] ??= []).push(n);
+  $('#m-items').innerHTML = branches.filter((b) => groups[b.label]).map((b) => `
+    <h3 class="group-title">${esc(b.label)} <span class="muted">${esc(groups[b.label].length)}</span></h3>
+    <div class="tiles">
+      ${groups[b.label].map((n) => `
+        <button class="tile ${clanView.memberTab === 'missing' ? 'missing' : ''}" data-node="${esc(n.id)}" style="--r:${esc(RARITY[n.rarity] ?? '#fff')}">
+          ${icon(n.id)}<b>${esc(n.name)}</b><small>${esc(TIER[n.tier] || '—')} · ${esc(short$(n.research_cost))}</small>
+        </button>`).join('')}
+    </div>`).join('') || `<p class="muted card pad">${clanView.memberTab === 'has' ? `${esc(m.name)} has not marked any unlocks yet.` : 'Nothing missing: the whole tree is unlocked.'}</p>`;
+
+  $('#m-tab').onclick = (e) => { const b = e.target.closest('[data-tab]'); if (b) { clanView.memberTab = b.dataset.tab; renderMember(memberId); } };
+  $('#m-items').onclick = (e) => { const b = e.target.closest('[data-node]'); if (b) showNode(b.dataset.node); };
+  $('#m-board').onclick = () => { ship.who = m.id; ship.mode = 'board'; };
+  // After ticking from the drawer, redraw this page rather than the board.
+  memberPageRefresh = () => renderMember(memberId);
+}
+let memberPageRefresh = null;
 
 // ------------------------------------------------------------------------------------------
 // Shipments: Larry's Tree board
@@ -601,7 +744,8 @@ function drawBoard(p, board) {
 
 // Redraw after a change. The camera is kept (same board size), and the node's details reopen.
 async function refreshBoard(id) {
-  await renderShipments();
+  if (document.body.dataset.page === 'clan' && memberPageRefresh) await memberPageRefresh();
+  else await renderShipments();
   if (id) showNode(id);
 }
 

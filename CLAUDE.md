@@ -41,7 +41,7 @@ Game data is imported from robrun.info (a volunteer fan site, no official API) b
 ## File map
 
 - `public/index.html`, `public/app.js`, `public/style.css`: the whole front end (hash-routed pages:
-  overview, shipments board and list, money, items, wipe planner, raid alerts)
+  overview, clan roster and member pages (`#clan/<id>`), shipments board and list, money, items, wipe planner, raid alerts)
 - `public/data/board.json`: Shipments board layout (synced); `public/img/`: icons (synced);
   `public/fonts/`: self-hosted fonts (SIL OFL)
 - `functions/api/[[path]].js`: every `/api/*` route: Discord OAuth, sessions, progress,
