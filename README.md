@@ -8,11 +8,11 @@ online or not.
 | Page | What it does |
 | --- | --- |
 | **Overview** | Clan metrics: nodes the clan has, average member completion, branch coverage, each member's unlocks, research spent and when they last updated (stale lists stand out), the nodes nobody has yet, and the best business. |
-| **Clan** | Every member who has logged in with Discord, added automatically on their first login. Shows each member's unlocks, research spent, join date and last update. Click a member for their own page: progress by branch and every node they have unlocked (or are missing), with a button to open their tree on the board. |
+| **Clan** | Every member who has logged in with Discord, added automatically on their first login. Shows each member's unlocks, research spent, join date and last update. Click a member for their own page: progress by branch and every node they have unlocked (or are missing), with a button to open their tree on the board. Admins can remove a member there (their unlocks are deleted; someone still in the Discord server can log in again and is added back empty). |
 | **Shipments** | Larry's Tree drawn like the game's board, with icons. View the whole clan (how many members have each node, and who) or any one member. Members mark their own unlocks; ticking a node also ticks what it requires. Admins can tick on a member's behalf. A list view is there for quick ticking on a phone. Resets when an admin starts the next wipe (the game resets progress when the clan moves to a new state). |
-| **Money** | Ranks the three businesses (Chemical Laboratory, Grow Room, Contraband repack) by $/hour with setup cost and payback, from game prices plus clan-measured model inputs. |
+| **Money** | Ranks the three businesses (Chemical Laboratory, Grow Room, Contraband repack) by $/hour with setup cost and payback. Below it, "Help check the numbers": one card per thing the model needs from the game, as a plain question with how to check it. Anyone can type what they saw and save it for the clan. |
 | **Wipe planner** | Goals for this wipe, optionally linked to a tree node and assigned to a member. Admins start the next wipe here. |
-| **Items** | Every tree node and business good with its price. Members can correct a price; edits are shared and survive data refreshes. |
+| **Items** | All 547 items in the game with icons. Click one for its stats (weapons: damage, fire rate, magazine, reload and more), where it is found on the map, who sells it and barter recipes, which clan members have it if it is in Larry's Tree, and (for the items the money model uses) the price the hub uses, which members can correct. |
 | **Raid alerts** | Send an alert that posts in the clan Discord channel with an @here ping. Scripts can send one through the ingest hook. |
 
 Stack: Cloudflare Pages (static `public/`), one Pages Function (`functions/api/[[path]].js`) and a
@@ -84,6 +84,7 @@ Never set `DEV_LOGIN` in Cloudflare. `curl https://<your-site>/api/auth/dev` mus
 | `data/products.psv` | robrun.info item pages for the goods the businesses use | `npm run sync` |
 | `data/model-inputs.psv` | Starting values for the Money model | Hand, then the site |
 | `public/data/board.json` | robrun.info planner layout: node positions, branches, Larry | `npm run sync` |
+| `public/data/items.json` | robrun.info catalog and map data: all items, stats, loot spots, sellers, barters | `npm run sync` |
 | `public/img/` | Item, branch and Larry icons: the game's art, re-hosted by robrun.info | `npm run sync` (downloads only missing files; `--no-images` skips) |
 | `public/fonts/` | Fira Sans Extra Condensed and Roboto Condensed (SIL OFL, see `LICENSE.txt`) | Copied once from `@fontsource` |
 
@@ -107,7 +108,7 @@ house each building needs. Sale prices get the criminal level bonus (Smuggler +5
 +10/20/35/50% at levels 2-5, per robrun.info).
 
 - **Chemical Laboratory**: the freezer is the bottleneck. Concentrate/hour = freezer places × 60 /
-  (freezer ticks × 6 min). Each Concentrate is worth the quality-weighted Hard Crystal price (or
+  minutes to freeze one Concentrate. Each Concentrate is worth the quality-weighted Hard Crystal price (or
   powder, once powder per crystal is measured), minus the reagent canisters used, valued at what the
   Smuggler pays for them.
 - **Grow Room**: tables × bushes per table × bags per bush × Uncommon Harvest Bag price / hours per
@@ -145,6 +146,7 @@ ingest hook.
 | `GET/POST /plan`, `PATCH/DELETE /plan/:id` | Wipe plan |
 | `POST /wipes` | Start the next wipe (admin) |
 | `GET /items`, `PUT /items/:id` | Prices; `{"price": null}` resets to the synced price |
+| `DELETE /members/:id` | Remove a member, their sessions and unlocks (admin; not yourself) |
 | `GET/POST /raids`, `DELETE /raids/:id`, `POST /raids/ingest` | Raid alerts |
 
 Sessions last 30 days. Removing someone from the Discord server stops their next login; to end an

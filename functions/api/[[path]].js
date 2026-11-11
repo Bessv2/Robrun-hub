@@ -53,7 +53,9 @@ export async function onRequest(context) {
   try {
     if (!env.DB) throw new HttpError(500, 'DB binding missing: add the D1 binding "DB" in Pages > Settings > Bindings');
     const url = new URL(request.url);
-    const parts = Array.isArray(params.path) ? params.path : params.path ? [params.path] : [];
+    const raw = Array.isArray(params.path) ? params.path : params.path ? [params.path] : [];
+    // Path parts arrive URL-encoded (a member id like "dev:alice" comes in as "dev%3Aalice").
+    const parts = raw.map((x) => { try { return decodeURIComponent(x); } catch { return x; } });
     const method = request.method.toUpperCase();
     const ctx = { request, env, url, db: env.DB, method, parts };
 
@@ -84,6 +86,7 @@ export async function onRequest(context) {
       case 'GET /raids': return await getRaids(ctx);
       case 'POST /raids': return await postRaid(ctx);
       case 'DELETE /raids': return await deleteRaid(ctx);
+      case 'DELETE /members': return await deleteMember(ctx);
     }
     throw new HttpError(404, 'Not found');
   } catch (e) {
@@ -449,8 +452,8 @@ export function computeIncome(itemRows, inputRows, level = 1) {
 
   // Chemical Laboratory ------------------------------------------------------------------
   const places = val('chem_freezer_places') ?? 0;
-  const ticks = val('chem_freezer_ticks') || 1;
-  const concPerHour = (places * 60) / (ticks * 6);
+  const freezeMinutes = val('chem_freezer_minutes') || 30;
+  const concPerHour = (places * 60) / freezeMinutes;
   const canistersPerConc = (val('chem_canisters_per_load') ?? 1) / (val('chem_concentrate_per_cycle') || 1);
   const split = [['1', val('chem_split_uncommon') ?? 0], ['2', val('chem_split_epic') ?? 0], ['3', val('chem_split_legendary') ?? 0]];
   const splitTotal = split.reduce((s, [, p]) => s + p, 0) || 1;
@@ -474,7 +477,7 @@ export function computeIncome(itemRows, inputRows, level = 1) {
     setup_lines: chemSetup.lines,
     per_hour: concPerHour * chemMargin,
     lines: [
-      `Freezer: ${places} places, ${ticks} ticks × 6 min per Concentrate = ${round(concPerHour)} Concentrate/hour`,
+      `Freezer: ${places} places, ${freezeMinutes} min per Concentrate = ${round(concPerHour)} Concentrate/hour`,
       `Value per Concentrate: $${Math.round(crystalValue).toLocaleString('en-US')} (${sellLines.join('; ')})`,
       `Reagents used: ${round(canistersPerConc)} canister per Concentrate × $${reagent.toLocaleString('en-US')} (Smuggler value) = $${Math.round(canistersPerConc * reagent).toLocaleString('en-US')}`,
       `Needs ${round(concPerHour * canistersPerConc)} Reagent Canisters per hour; the reactor is assumed not to be the bottleneck`,
@@ -660,6 +663,27 @@ async function putItemPrice(ctx) {
     .bind(price, ctx.me.id, id)
     .run();
   return json({ ok: true });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Members
+
+// Admin only. Removes a member from the clan list with their sessions and unlocks. Someone still
+// in the Discord server can log in again later and is added back with an empty list.
+async function deleteMember(ctx) {
+  requireAdmin(ctx);
+  const id = ctx.parts[1] ?? '';
+  if (id === ctx.me.id) throw new HttpError(400, 'You cannot remove yourself');
+  const m = await ctx.db.prepare('SELECT id, name FROM members WHERE id = ?').bind(id).first();
+  if (!m) throw new HttpError(404, 'Member not found');
+  await ctx.db.batch([
+    ctx.db.prepare('DELETE FROM sessions WHERE member_id = ?').bind(id),
+    ctx.db.prepare('DELETE FROM progress WHERE member_id = ?').bind(id),
+    ctx.db.prepare('DELETE FROM status WHERE member_id = ?').bind(id),
+    ctx.db.prepare('UPDATE plan SET assignee = NULL WHERE assignee = ?').bind(id),
+    ctx.db.prepare('DELETE FROM members WHERE id = ?').bind(id),
+  ]);
+  return json({ ok: true, removed: m.name });
 }
 
 // ---------------------------------------------------------------------------------------------

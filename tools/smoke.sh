@@ -42,6 +42,7 @@ check GET  /api/auth/dev
 check GET  /api/me
 check GET  /api/progress
 check GET  /data/board.json
+check GET  /data/items.json
 check GET  /img/items/meth_lab_1.webp
 check PUT  /api/progress '{"item_id":"meth_lab_1","done":true}'
 check PUT  /api/progress '{"item_id":"meth_lab_1","done":false}'
@@ -59,6 +60,11 @@ check GET  /api/raids
 check POST /api/raids '{"kind":"info","target":"smoke test, ignore"}'
 RAID_ID=$(last_id)
 [[ -n "$RAID_ID" ]] && check DELETE "/api/raids/$RAID_ID"
+
+# Remove a member: a throwaway test member logs in, then the dev admin removes them.
+curl -sS -o /dev/null -c "$JAR.2" "$BASE/api/auth/dev?as=Smoke%20Leaver"
+check DELETE "/api/members/dev:smoke-leaver"
+rm -f "$JAR.2"
 
 echo
 echo "$PASSED passed, $FAILED failed"
