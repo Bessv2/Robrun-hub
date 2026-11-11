@@ -3,8 +3,9 @@
 ## Project
 
 Rob Run Clan Hub: a private web hub for a ROB RUN clan. Members log in with Discord (clan server
-members only) and share status, Larry's Tree progress, a business money model, a wipe planner,
-item prices and raid alerts that ping a Discord channel through a webhook.
+members only) and track progress and metrics: who has unlocked what in Larry's Tree (shown as the
+game's Shipments board), clan metrics, a business money model, a wipe planner, item prices and raid
+alerts that ping a Discord channel through a webhook. It is not an online/activity tracker.
 
 Stack: Cloudflare Pages serving `public/` + one Pages Function (`functions/api/[[path]].js`) + D1.
 No build step, no front-end dependencies, no frameworks. Keep it that way.
@@ -39,8 +40,11 @@ Game data is imported from robrun.info (a volunteer fan site, no official API) b
 
 ## File map
 
-- `public/index.html`, `public/app.js`, `public/style.css`: the whole front end (six hash-routed tabs)
-- `functions/api/[[path]].js`: every `/api/*` route: Discord OAuth, sessions, status, progress,
+- `public/index.html`, `public/app.js`, `public/style.css`: the whole front end (hash-routed pages:
+  overview, shipments board and list, money, items, wipe planner, raid alerts)
+- `public/data/board.json`: Shipments board layout (synced); `public/img/`: icons (synced);
+  `public/fonts/`: self-hosted fonts (SIL OFL)
+- `functions/api/[[path]].js`: every `/api/*` route: Discord OAuth, sessions, progress,
   money model (`computeIncome`), plan, wipes, items, raids, Discord webhook, ingest hook
 - `schema.sql`: base D1 schema (idempotent); `migrations/`: numbered changes after that
 - `data/larry-tree.psv`, `data/products.psv`: synced game data; `data/model-inputs.psv`: model defaults

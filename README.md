@@ -1,12 +1,14 @@
 # Rob Run Clan Hub
 
-A private web hub for a ROB RUN clan. Members log in with Discord (only members of the clan
-server get in) and share:
+A private web hub where a ROB RUN clan tracks progress and metrics. Members log in with Discord
+(only members of the clan server get in). It is not an online or activity tracker: each member
+keeps their own Larry's Tree list up to date, and everyone can see it whether that member is
+online or not.
 
-| Tab | What it does |
+| Page | What it does |
 | --- | --- |
-| **Status** | Who is online, at base, raiding or farming this wipe, with a short note. |
-| **Progress** | Who has unlocked what. Each member ticks the Larry's Tree nodes they have researched (ticking a node also ticks what it requires). Pick any member on the roster to see their unlocks; every node lists who has it. Admins can tick on a member's behalf. Resets each wipe. |
+| **Overview** | Clan metrics: nodes the clan has, average member completion, branch coverage, each member's unlocks, research spent and when they last updated (stale lists stand out), the nodes nobody has yet, and the best business. |
+| **Shipments** | Larry's Tree drawn like the game's board, with icons. View the whole clan (how many members have each node, and who) or any one member. Members mark their own unlocks; ticking a node also ticks what it requires. Admins can tick on a member's behalf. A list view is there for quick ticking on a phone. Resets when an admin starts the next wipe (the game resets progress when the clan moves to a new state). |
 | **Money** | Ranks the three businesses (Chemical Laboratory, Grow Room, Contraband repack) by $/hour with setup cost and payback, from game prices plus clan-measured model inputs. |
 | **Wipe planner** | Goals for this wipe, optionally linked to a tree node and assigned to a member. Admins start the next wipe here. |
 | **Items** | Every tree node and business good with its price. Members can correct a price; edits are shared and survive data refreshes. |
@@ -80,6 +82,9 @@ Never set `DEV_LOGIN` in Cloudflare. `curl https://<your-site>/api/auth/dev` mus
 | `data/larry-tree.psv` | robrun.info planner data (`/en/planner/data.js`) | `npm run sync` |
 | `data/products.psv` | robrun.info item pages for the goods the businesses use | `npm run sync` |
 | `data/model-inputs.psv` | Starting values for the Money model | Hand, then the site |
+| `public/data/board.json` | robrun.info planner layout: node positions, branches, Larry | `npm run sync` |
+| `public/img/` | Item, branch and Larry icons: the game's art, re-hosted by robrun.info | `npm run sync` (downloads only missing files; `--no-images` skips) |
+| `public/fonts/` | Fira Sans Extra Condensed and Roboto Condensed (SIL OFL, see `LICENSE.txt`) | Copied once from `@fontsource` |
 
 After a game patch:
 
@@ -90,7 +95,8 @@ npm run seed:build && npm run db:remote
 ```
 
 robrun.info has no published API or reuse terms. Keep the sync manual, run it only after a patch,
-and email support@robrun.info before automating it. `node tools/sync-robrun-info.mjs --save DIR`
+and email support@robrun.info before automating it. The icons belong to the game's developer; the hub
+uses them as a private fan tool, the same way robrun.info does. `node tools/sync-robrun-info.mjs --save DIR`
 keeps a copy of every fetched page; `--from DIR` re-runs against that copy without touching the site.
 
 ## Money model
@@ -133,7 +139,6 @@ ingest hook.
 | `GET /auth/login`, `GET /auth/callback`, `POST /auth/logout` | Discord OAuth (`identify guilds.members.read`) |
 | `GET /auth/dev[?as=Name]` | Local dev login (admin, or a test member with `as`); 404 unless `DEV_LOGIN=1` on localhost |
 | `GET /me` | Current member, admin flag, wipe |
-| `GET/PUT /status` | Member status for this wipe |
 | `GET/PUT /progress` | Larry's Tree unlocks for this wipe. PUT `{item_id, done, member_id?}`: `member_id` other than your own is admin only. Returns the nodes `added` or `removed` (prerequisites and dependents cascade) |
 | `GET /income?level=1..5`, `PUT /inputs/:key` | Money model and its inputs |
 | `GET/POST /plan`, `PATCH/DELETE /plan/:id` | Wipe plan |
