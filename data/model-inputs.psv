@@ -3,18 +3,18 @@
 # status: assumed | reported (one player) | measured (clan tested) | game (robrun.info game data) | unknown | setup (your choice)
 # Anything assumed, reported or unknown marks its business provisional on the Money tab.
 key|business|label|value|unit|status|how_to_measure|sort
-chem_concentrate_per_cycle|chem|Concentrate per reactor cycle|1|pcs|assumed|Load one canister, count outputs after the full load|10
-chem_canisters_per_load|chem|Canisters per reactor load|1|canisters|assumed|Note how many the reactor takes before it starts|11
-chem_freezer_ticks|chem|Freezer ticks per Concentrate (1 tick = 6 min)|5|ticks|assumed|Time one Concentrate from insert to Hard Crystals, divide by 6 minutes|12
-chem_split_uncommon|chem|Crystal quality split: Uncommon|65|%|assumed|Tally rarity over 20 or more crystals|13
-chem_split_epic|chem|Crystal quality split: Epic|25|%|assumed|Tally rarity over 20 or more crystals|14
-chem_split_legendary|chem|Crystal quality split: Legendary|10|%|assumed|Tally rarity over 20 or more crystals|15
-chem_freezer_places|chem|Freezer places (tier I)|4||assumed|robrun.info says freezers hold 4, 6 or 8; count the places on a tier I freezer|16
-chem_powder_per_crystal|chem|Powder per Hard Crystal||pcs|unknown|Crush one crystal at a Lab Table and count|17
-grow_hours_per_harvest|grow|Hours per grow harvest|1.5|hours|reported|Time one bush from harvest to next harvest, no upgrades|20
-grow_bags_per_bush|grow|Bags per bush|3|bags|reported|Average over 20 or more harvests (robrun.info: 2 to 4)|21
-grow_bushes_per_table|grow|Bushes per Grow Table|6|bushes|game|robrun.info: one table holds 6 bushes|22
-grow_tables|grow|Grow Tables you run|1|tables|setup|Your choice; the Grow Room has 6 places. Each extra table adds its price to setup|23
-repack_minutes|repack|Minutes per contraband repack|30|minutes|reported|Time one repack, no Label Printer|30
-repack_rarity_rate|repack|Rarity Cargo rate|0|%|assumed|Tally Premium vs Rarity over 20 or more repacks|31
-repack_slots|repack|Repacks running at once|1|slots|setup|Contraband Workbench has 1 base slot; Tool Boxes add more|32
+chem_concentrate_per_cycle|chem|How many Concentrate does the reactor make from one load?|1|Concentrate|assumed|Load the reactor, let it finish, and count the Concentrate that comes out.|10
+chem_canisters_per_load|chem|How many Reagent Canisters does the reactor take before it starts?|1|canisters|assumed|Load canisters one at a time and count how many go in before it starts cooking.|11
+chem_freezer_minutes|chem|How many minutes does the freezer take to turn 1 Concentrate into Hard Crystals?|30|minutes|assumed|Put 1 Concentrate in the freezer and time it until Hard Crystals appear. Use a freezer with no Evaporator or Refrigerant.|12
+chem_split_uncommon|chem|Out of 100 Hard Crystals, how many are green (Uncommon)?|65|out of 100|assumed|Freeze 20 or more crystals, count each colour, and scale to 100.|13
+chem_split_epic|chem|Out of 100 Hard Crystals, how many are purple (Epic)?|25|out of 100|assumed|Same count as above: the purple ones, scaled to 100.|14
+chem_split_legendary|chem|Out of 100 Hard Crystals, how many are yellow (Legendary)?|10|out of 100|assumed|Same count as above: the yellow ones, scaled to 100.|15
+chem_freezer_places|chem|How many Concentrate fit in a tier I freezer at once?|4|places|assumed|Open an empty tier I Industrial Freezer and count the places.|16
+chem_powder_per_crystal|chem|How many Crystalline Powder do you get from 1 Hard Crystal?||powder|unknown|Put 1 Hard Crystal on the Lab Table and count the powder that comes out.|17
+grow_hours_per_harvest|grow|How many hours from one harvest to the next?|1.5|hours|reported|Harvest a bush, note the time, and check when it is ready again. Use a table with no Fan, Water Pump or UV Lamp.|20
+grow_bags_per_bush|grow|On average, how many Harvest Bags does one bush give?|3|bags|reported|Write down the bags from 20 or more harvests and take the average. robrun.info says 2 to 4.|21
+grow_bushes_per_table|grow|How many bushes fit on one Grow Table?|6|bushes|game|From the game data on robrun.info. Only change it if the game shows something different.|22
+grow_tables|grow|How many Grow Tables do you plan to run?|1|tables|setup|Your choice. A Grow Room fits up to 6. Each extra table adds its cost to the setup.|23
+repack_minutes|repack|How many minutes does one contraband repack take?|30|minutes|reported|Time one repack at a Contraband Workbench with no Label Printer.|30
+repack_rarity_rate|repack|Out of 100 repacks, how many come out as Rarity Cargo?|0|out of 100|assumed|Count Premium vs Rarity Cargo over 20 or more repacks, and scale the Rarity count to 100.|31
+repack_slots|repack|How many repacks do you run at the same time?|1|at once|setup|Your choice. A Contraband Workbench starts with 1 slot; Tool Boxes add more.|32

@@ -42,9 +42,10 @@ Game data is imported from robrun.info (a volunteer fan site, no official API) b
 
 - `public/index.html`, `public/app.js`, `public/style.css`: the whole front end (hash-routed pages:
   overview, clan roster and member pages (`#clan/<id>`), shipments board and list, money, items, wipe planner, raid alerts)
-- `public/data/board.json`: Shipments board layout (synced); `public/img/`: icons (synced);
+- `public/data/board.json`: Shipments board layout (synced); `public/data/items.json`: full item
+  catalog with stats, loot spots, sellers and barters (synced); `public/img/`: icons (synced);
   `public/fonts/`: self-hosted fonts (SIL OFL)
-- `functions/api/[[path]].js`: every `/api/*` route: Discord OAuth, sessions, progress,
+- `functions/api/[[path]].js`: every `/api/*` route: Discord OAuth, sessions, members, progress,
   money model (`computeIncome`), plan, wipes, items, raids, Discord webhook, ingest hook
 - `schema.sql`: base D1 schema (idempotent); `migrations/`: numbered changes after that
 - `data/larry-tree.psv`, `data/products.psv`: synced game data; `data/model-inputs.psv`: model defaults

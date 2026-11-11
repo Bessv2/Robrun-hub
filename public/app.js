@@ -21,7 +21,7 @@ const icon = (id, cls = '') => `<img class="ic ${cls}" src="${esc(iconUrl(id))}"
 
 let me = null;
 let wipe = null;
-const cache = { board: null, progress: null };
+const cache = { board: null, progress: null, catalog: null };
 
 // Images that fail to load (missing icon) are hidden rather than shown broken.
 document.addEventListener('error', (e) => { if (e.target.tagName === 'IMG') e.target.classList.add('noimg'); }, true);
@@ -436,6 +436,7 @@ async function renderMember(memberId) {
       <div class="member-actions">
         <a class="btn" href="#shipments" id="m-board">OPEN ON THE BOARD</a>
         ${editable ? `<span class="small muted">${m.id === me.id ? 'You can' : 'As an admin you can'} change this list on the board, or click any item below.</span>` : ''}
+        ${me.isAdmin && m.id !== me.id ? '<button class="btn danger small" id="m-remove">REMOVE FROM CLAN</button>' : ''}
       </div>
     </header>
 
@@ -473,6 +474,16 @@ async function renderMember(memberId) {
   $('#m-tab').onclick = (e) => { const b = e.target.closest('[data-tab]'); if (b) { clanView.memberTab = b.dataset.tab; renderMember(memberId); } };
   $('#m-items').onclick = (e) => { const b = e.target.closest('[data-node]'); if (b) showNode(b.dataset.node); };
   $('#m-board').onclick = () => { ship.who = m.id; ship.mode = 'board'; };
+  const removeBtn = $('#m-remove');
+  if (removeBtn) removeBtn.onclick = async () => {
+    if (!confirm(`Remove ${m.name} from the clan list?\n\nTheir ${mine.length} unlocks are deleted and they are logged out. To keep them out for good, also remove them from the clan Discord server: if they are still in it, they can log in again and will be added back with an empty list.`)) return;
+    try {
+      await api('DELETE', `members/${encodeURIComponent(m.id)}`);
+      toast(`${m.name} was removed from the clan`);
+      if (ship.who === m.id) ship.who = me.id;
+      location.hash = '#clan';
+    } catch (err) { fail(err); }
+  };
   // After ticking from the drawer, redraw this page rather than the board.
   memberPageRefresh = () => renderMember(memberId);
 }
@@ -877,26 +888,38 @@ function drawList(p, board) {
 // Money
 
 let moneyLevel = 1;
-const STATUSES = ['assumed', 'reported', 'measured', 'game', 'unknown', 'setup'];
 const BIZ_GOODS = { chem: ['hard_crystal_1', 'hard_crystal_2', 'hard_crystal_3'], grow: ['bush_drugs_1', 'bush_drugs_2', 'bush_drugs_3'], repack: ['cargo_alcohol_grade_1', 'cargo_alcohol_grade_2', 'cargo_alcohol_grade_3'] };
+const BIZ_NAME = { chem: 'Chemical Laboratory', grow: 'Grow Room', repack: 'Contraband repack' };
+// Plain words for where each number came from.
+const ANSWER = {
+  assumed: { text: 'GUESS: PLEASE CHECK', check: true },
+  unknown: { text: 'NOBODY KNOWS YET', check: true },
+  reported: { text: "ONE PLAYER'S REPORT", check: true },
+  measured: { text: 'CHECKED BY THE CLAN', check: false },
+  game: { text: 'FROM GAME DATA', check: false },
+  setup: { text: 'YOUR CHOICE', check: false },
+};
 
 async function renderMoney() {
   const data = await api('GET', `income?level=${moneyLevel}`);
   const provisional = data.businesses.some((b) => b.provisional);
   const hrs = (h) => (h == null ? 'never' : h < 1 ? `${Math.round(h * 60)} min` : `${h.toFixed(1)} h`);
+  const toCheck = data.inputs.filter((r) => ANSWER[r.status]?.check).length;
+  const order = (r) => (ANSWER[r.status]?.check ? 0 : 1);
+
   view.innerHTML = `
-    ${hero('ECONOMY / BUSINESSES', 'MONEY', 'The three base businesses ranked by money per hour, from game prices and the inputs the clan has measured.', `
+    ${hero('ECONOMY / BUSINESSES', 'MONEY', 'The three base businesses ranked by money per hour, from game prices and numbers the clan has checked in game.', `
       <label class="level">CRIMINAL LEVEL <select id="level">${[1, 2, 3, 4, 5].map((l) => `<option ${l === data.level ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`)}
-    ${provisional ? '<p class="warn">Provisional: some inputs below are assumed or come from a single player report. Measure them in game and enter the results.</p>' : ''}
+    ${provisional ? `<p class="warn">Some of the numbers behind this ranking are still guesses, so it may change. You can help: ${toCheck} quick in-game check${toCheck === 1 ? '' : 's'} below.</p>` : ''}
     <section class="biz">
       ${data.businesses.map((b, i) => `
         <article class="card biz-card">
           <div class="biz-art">${icon(BIZ_ICON[b.id] ?? '')}<span class="biz-goods">${(BIZ_GOODS[b.id] ?? []).map((g) => icon(g)).join('')}</span></div>
-          <header><span class="rank">#${i + 1}</span><h3>${esc(b.name)}</h3>${b.provisional ? '<span class="badge warn">PROVISIONAL</span>' : ''}</header>
+          <header><span class="rank">#${i + 1}</span><h3>${esc(b.name)}</h3>${b.provisional ? '<span class="badge warn">USES GUESSES</span>' : ''}</header>
           <dl class="figs">
             <div><dt>Setup</dt><dd>${esc(money(b.setup_cost))}</dd></div>
             <div><dt>$/hour</dt><dd class="big">${esc(money(b.per_hour))}</dd></div>
-            <div><dt>Payback</dt><dd>${esc(hrs(b.payback_hours))}</dd></div>
+            <div><dt>Pays back in</dt><dd>${esc(hrs(b.payback_hours))}</dd></div>
           </dl>
           <details>
             <summary>How this is worked out</summary>
@@ -905,71 +928,90 @@ async function renderMoney() {
               ${b.setup_lines.map((l) => `<tr><td>${esc(l.name)}</td><td>${esc(money(l.research))}</td><td>${esc(money(l.price))}</td></tr>`).join('')}
             </table>
             <ul class="small">${b.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
-            ${b.pending.length ? `<p class="small warn">Not measured yet: ${esc(b.pending.join(', '))}</p>` : ''}
+            ${b.pending.length ? `<p class="small warn">Still to check: ${esc(b.pending.join(' · '))}</p>` : ''}
           </details>
         </article>`).join('')}
     </section>
-    <p class="muted small">Setup is research plus Trade Laptop price at tier I and does not include the house each building needs. Sale prices include the criminal level bonus.</p>
+    <p class="muted small">Setup is the research cost plus the Trade Laptop price at tier I, and does not include the house each building needs. Sale prices include the criminal level bonus.</p>
+
     <section>
-      <div class="sec-head"><h2>MODEL INPUTS</h2><span class="muted small">Shared with the clan. Measure in game, enter the number, mark it measured.</span></div>
-      <div class="card flush table-wrap">
-        <table class="inputs">
-          <thead><tr><th>Input</th><th>Value</th><th>Status</th><th>How to measure</th><th></th></tr></thead>
-          <tbody>
-            ${data.inputs.map((r) => `
-              <tr data-key="${esc(r.key)}">
-                <td><span class="tag">${esc(r.business)}</span> ${esc(r.label)}</td>
-                <td class="nowrap"><input type="number" step="any" min="0" value="${esc(r.value ?? '')}" placeholder="?"> <span class="muted small">${esc(r.unit)}</span></td>
-                <td><select>${STATUSES.map((s) => `<option ${s === r.status ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
-                <td class="small">${esc(r.how_to_measure)}${r.updated_by_name ? `<div class="muted">set by ${esc(r.updated_by_name)} ${esc(ago(r.updated_at))}</div>` : ''}</td>
-                <td><button class="btn small" data-save>SAVE</button></td>
-              </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
+      <div class="sec-head"><h2>HELP CHECK THE NUMBERS</h2><span class="muted small">${esc(toCheck)} still to check</span></div>
+      <p class="q-intro">The money ranking uses a few numbers we can only find out by playing. Each card below is one quick check. Do it in game, type what you saw, and press <b>Save</b>. Everyone in the clan sees your answer, and the ranking updates straight away.</p>
+      ${['chem', 'grow', 'repack'].map((biz) => {
+        const rows = data.inputs.filter((r) => r.business === biz).sort((a, b) => order(a) - order(b) || a.sort - b.sort);
+        const open = rows.filter((r) => ANSWER[r.status]?.check).length;
+        return `
+          <h3 class="group-title q-biz">${icon(BIZ_ICON[biz], 'sm')} ${esc(BIZ_NAME[biz])} <span class="muted">${open ? `${esc(open)} to check` : 'all checked'}</span></h3>
+          <div class="q-grid">
+            ${rows.map((r) => {
+              const a = ANSWER[r.status] ?? ANSWER.assumed;
+              return `
+              <form class="q-card ${a.check ? 'needs' : 'done'}" data-key="${esc(r.key)}" data-status="${esc(r.status)}">
+                <span class="q-badge s-${esc(r.status)}">${esc(a.text)}</span>
+                <b class="q-text">${esc(r.label)}</b>
+                <p class="q-how"><span>How to check:</span> ${esc(r.how_to_measure)}</p>
+                <div class="q-answer">
+                  <input type="number" step="any" min="0" name="value" value="${esc(r.value ?? '')}" placeholder="?" aria-label="${esc(r.label)}">
+                  <span class="q-unit">${esc(r.unit)}</span>
+                  <button class="btn small">SAVE</button>
+                </div>
+                ${r.updated_by_name ? `<small class="muted">Answered by ${esc(r.updated_by_name)} ${esc(ago(r.updated_at))}</small>` : ''}
+              </form>`;
+            }).join('')}
+          </div>`;
+      }).join('')}
     </section>`;
 
   $('#level').onchange = (e) => { moneyLevel = Number(e.target.value); renderMoney(); };
-  const table = view.querySelector('table.inputs');
-  table.onclick = async (e) => {
-    if (!e.target.matches('[data-save]')) return;
-    const tr = e.target.closest('tr');
-    const value = tr.querySelector('input').value;
-    let status = tr.querySelector('select').value;
-    if (value === '') status = 'unknown';
-    try {
-      await api('PUT', `inputs/${encodeURIComponent(tr.dataset.key)}`, { value: value === '' ? null : Number(value), status });
-      toast('Saved. Ranking updated.');
-      renderMoney();
-    } catch (err) { fail(err); }
-  };
-  table.oninput = (e) => {
-    if (e.target.matches('input')) {
-      const sel = e.target.closest('tr').querySelector('select');
-      if (['assumed', 'reported', 'unknown'].includes(sel.value)) sel.value = 'measured';
-    }
-  };
+  view.querySelectorAll('.q-card').forEach((form) => {
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const raw = new FormData(form).get('value');
+      // A typed answer counts as checked by the clan; "your choice" settings stay as they are.
+      const status = raw === '' ? 'unknown' : form.dataset.status === 'setup' ? 'setup' : 'measured';
+      try {
+        await api('PUT', `inputs/${encodeURIComponent(form.dataset.key)}`, { value: raw === '' ? null : Number(raw), status });
+        toast('Thanks! Saved for the clan, and the ranking is updated.');
+        renderMoney();
+      } catch (err) { fail(err); }
+    };
+  });
 }
 
 // ------------------------------------------------------------------------------------------
-// Items catalog
+// Items catalog: every item, with stats, where to find it and how to get it
 
-const itemFilter = { q: '', group: '', rarity: '' };
+const itemFilter = { q: '', group: '', rarity: '', show: '' };
+
+async function loadCatalog() {
+  if (!cache.catalog) {
+    const res = await fetch('/data/items.json');
+    if (!res.ok) throw new Error('Item catalog missing: run the sync (npm run sync)');
+    cache.catalog = await res.json();
+  }
+  return cache.catalog;
+}
 
 async function renderItems() {
-  const data = await api('GET', 'items');
-  $('#nav-items').textContent = data.items.length;
-  const groups = [...new Set(data.items.map((i) => i.category))];
-  const rarities = Object.keys(RARITY).filter((r) => data.items.some((i) => i.rarity === r));
+  const [cat, hub, p] = await Promise.all([loadCatalog(), api('GET', 'items'), loadProgress().catch(() => null)]);
+  const hubById = Object.fromEntries(hub.items.map((i) => [i.id, i]));
+  const items = cat.items;
+  $('#nav-items').textContent = items.length;
+  const groups = Object.entries(cat.groups);
+  const rarities = Object.keys(RARITY).filter((r) => items.some((i) => i.rarity === r));
+  const priceOf = (i) => hubById[i.id]?.price ?? i.price;
+  const SHOW = [['', 'All items'], ['found', 'Known spot on the map'], ['buy', 'Sold or bartered'], ['tree', "In Larry's Tree"]];
+
   view.innerHTML = `
-    ${hero(`CATALOG / ${esc(data.items.length)}`, 'ITEMS', "Every Larry's Tree node and business good with its price. Correct a price when the game shows a different one; edits are shared and survive data refreshes.")}
+    ${hero(`CATALOG / ${esc(items.length)}`, 'ITEMS', 'Every item in the game: its stats, where it is found and how to get it. Click an item for the details.')}
     <div class="filters">
       <div class="fchips" id="i-group">
-        <button class="${!itemFilter.group ? 'on' : ''}" data-v="">ALL <small>${esc(data.items.length)}</small></button>
-        ${groups.map((g) => `<button class="${g === itemFilter.group ? 'on' : ''}" data-v="${esc(g)}">${esc((GROUP[g] ?? g).toUpperCase())} <small>${esc(data.items.filter((i) => i.category === g).length)}</small></button>`).join('')}
+        <button class="${!itemFilter.group ? 'on' : ''}" data-v="">ALL <small>${esc(items.length)}</small></button>
+        ${groups.map(([g, label]) => `<button class="${g === itemFilter.group ? 'on' : ''}" data-v="${esc(g)}">${esc(label.toUpperCase())} <small>${esc(items.filter((i) => i.group === g).length)}</small></button>`).join('')}
       </div>
       <div class="row wrap">
         <div class="fchips" id="i-rar">${rarities.map((r) => `<button class="rar ${r === itemFilter.rarity ? 'on' : ''}" data-v="${esc(r)}" style="--r:${RARITY[r]}">${esc(r.toUpperCase())}</button>`).join('')}</div>
+        <select id="i-show" aria-label="Show">${SHOW.map(([v, l]) => `<option value="${v}" ${v === itemFilter.show ? 'selected' : ''}>${l}</option>`).join('')}</select>
         <input type="search" id="i-q" placeholder="Filter by name" value="${esc(itemFilter.q)}" aria-label="Filter by name" class="grow">
       </div>
     </div>
@@ -977,53 +1019,95 @@ async function renderItems() {
     <div class="catalog" id="i-grid"></div>`;
 
   const draw = () => {
-    const q = itemFilter.q.toLowerCase();
-    const rows = data.items.filter((i) => (!q || i.name.toLowerCase().includes(q)) && (!itemFilter.group || i.category === itemFilter.group) && (!itemFilter.rarity || i.rarity === itemFilter.rarity));
-    $('#i-count').innerHTML = `<b>${esc(rows.length)}</b> items`;
-    $('#i-grid').innerHTML = rows.map((i) => `
+    const q = itemFilter.q.trim().toLowerCase();
+    const rows = items.filter((i) =>
+      (!q || i.name.toLowerCase().includes(q) || i.type.toLowerCase().includes(q)) &&
+      (!itemFilter.group || i.group === itemFilter.group) &&
+      (!itemFilter.rarity || i.rarity === itemFilter.rarity) &&
+      (!itemFilter.show || (itemFilter.show === 'found' && i.found.length) || (itemFilter.show === 'buy' && (i.buy.length || i.barter.length)) || (itemFilter.show === 'tree' && p?.byId[i.id])));
+    $('#i-count').innerHTML = `<b>${esc(rows.length)}</b> item${rows.length === 1 ? '' : 's'}`;
+    $('#i-grid').innerHTML = rows.slice(0, 400).map((i) => `
       <button class="item-card" data-id="${esc(i.id)}" style="--r:${esc(RARITY[i.rarity] ?? '#555')}">
         <span class="item-art">${icon(i.id)}</span>
         <b>${esc(i.name)}</b>
-        <small>${esc(GROUP[i.category] ?? i.category)}${i.tier ? ` · ${esc(TIER[i.tier])}` : ''}</small>
-        <span class="item-price">${esc(money(i.price))}${i.overridden ? '<i title="Edited price">✎</i>' : ''}</span>
-      </button>`).join('') || '<p class="muted">No items match.</p>';
+        <small>${esc(i.type)}</small>
+        <span class="item-tags">
+          ${i.found.length ? '<i class="t-found">ON MAP</i>' : ''}${i.buy.length ? '<i>SHOP</i>' : ''}${i.barter.length ? '<i>BARTER</i>' : ''}${p?.byId[i.id] ? '<i class="t-tree">TREE</i>' : ''}
+        </span>
+        <span class="item-price">${priceOf(i) != null ? esc(money(priceOf(i))) : ''}${hubById[i.id]?.overridden ? '<i title="Price edited by the clan">✎</i>' : ''}</span>
+      </button>`).join('') + (rows.length > 400 ? `<p class="muted">Showing 400 of ${esc(rows.length)}. Narrow it down with the filters.</p>` : '') || '<p class="muted">No items match.</p>';
   };
   draw();
   $('#i-q').oninput = (e) => { itemFilter.q = e.target.value; draw(); };
+  $('#i-show').onchange = (e) => { itemFilter.show = e.target.value; draw(); };
   $('#i-group').onclick = (e) => { const b = e.target.closest('[data-v]'); if (!b) return; itemFilter.group = b.dataset.v; renderItems(); };
   $('#i-rar').onclick = (e) => { const b = e.target.closest('[data-v]'); if (!b) return; itemFilter.rarity = itemFilter.rarity === b.dataset.v ? '' : b.dataset.v; renderItems(); };
-  $('#i-grid').onclick = (e) => {
-    const b = e.target.closest('[data-id]');
-    if (!b) return;
-    const i = data.items.find((x) => x.id === b.dataset.id);
-    openDrawer(`
-      <div class="d-head" style="--r:${esc(RARITY[i.rarity] ?? '#555')}">
-        <div class="d-icon">${icon(i.id)}</div>
-        <div><p class="kicker">${esc((GROUP[i.category] ?? i.category).toUpperCase())}${i.tier ? ` · TIER ${esc(TIER[i.tier])}` : ''}</p><h2>${esc(i.name)}</h2><p class="rar-name">${esc(i.rarity ?? '')}</p></div>
-      </div>
-      <dl class="facts">
-        ${i.research_cost != null ? `<div><dt>Research</dt><dd>${esc(money(i.research_cost))}</dd></div>` : ''}
-        ${i.smuggler != null ? `<div><dt>Smuggler pays</dt><dd>${esc(money(i.smuggler))}</dd></div>` : ''}
-        ${i.fence != null ? `<div><dt>Fence pays</dt><dd>${esc(money(i.fence))}</dd></div>` : ''}
-        ${i.hub_buy != null ? `<div><dt>Hub seller</dt><dd>${esc(money(i.hub_buy))}</dd></div>` : ''}
-        ${i.seized != null ? `<div><dt>Seized by a cop</dt><dd>${esc(money(i.seized))}</dd></div>` : ''}
-      </dl>
+  $('#i-grid').onclick = (e) => { const b = e.target.closest('[data-id]'); if (b) showItem(b.dataset.id, cat, hubById, p); };
+}
+
+function showItem(id, cat, hubById, p) {
+  const i = cat.items.find((x) => x.id === id);
+  if (!i) return;
+  const h = hubById[id];
+  const node = p?.byId[id];
+  const tierText = (t) => (t ? `tier ${TIER[t] ?? t}` : '');
+  const ingredient = (g) => (g.cash != null
+    ? `<span class="ing cash">${esc(money(g.cash))}</span>`
+    : `<button class="ing" data-item="${esc(g.id)}">${icon(g.id)}<span>${g.n > 1 ? `${esc(g.n)} × ` : ''}${esc(g.name)}</span></button>`);
+
+  openDrawer(`
+    <div class="d-head" style="--r:${esc(RARITY[i.rarity] ?? '#555')}">
+      <div class="d-icon">${icon(i.id)}</div>
+      <div><p class="kicker">${esc((cat.groups[i.group] ?? '').toUpperCase())}${i.type ? ` · ${esc(i.type.toUpperCase())}` : ''}</p><h2>${esc(i.name)}</h2><p class="rar-name">${esc(i.rarity ?? '')}</p></div>
+    </div>
+    ${i.desc ? `<p class="d-desc">${esc(i.desc)}</p>` : ''}
+    ${i.alert ? `<p class="warn small">${esc(i.alert)}</p>` : ''}
+    <dl class="facts">
+      ${i.price != null ? `<div><dt>Price</dt><dd>${esc(money(h?.price ?? i.price))}</dd></div>` : ''}
+      ${i.fence != null ? `<div><dt>Fence pays (level 1)</dt><dd>${esc(money(i.fence))}</dd></div>` : ''}
+      ${h?.smuggler != null ? `<div><dt>Smuggler pays</dt><dd>${esc(money(h.smuggler))}</dd></div>` : ''}
+    </dl>
+
+    ${i.stats.length ? `<h3>Stats</h3><table class="stats">${i.stats.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</table>` : ''}
+
+    <h3>Where it's found</h3>
+    ${i.found.length
+      ? `<ul class="found">${i.found.map((f) => `<li><b>${esc(f.where)}</b>${f.region ? ` <span class="muted">· ${esc(f.region)}</span>` : ''}<span class="spots">× ${esc(f.n)} spot${f.n === 1 ? '' : 's'}</span></li>`).join('')}</ul>`
+      : `<p class="small muted">${i.buy.length || i.barter.length ? 'Not found as loot: see how to get it below.' : 'No known fixed spot. It turns up in random loot and containers, whose contents have not been mapped yet.'}</p>`}
+
+    ${i.buy.length || i.barter.length || i.routes.length ? '<h3>How to get it</h3>' : ''}
+    ${i.buy.length ? `<ul class="found">${i.buy.map((b) => `<li><b>${esc(b.v)}</b>${b.t ? ` <span class="muted">· ${esc(tierText(b.t))}</span>` : ''}${b.tree ? `<span class="spots">${b.unlock ? `research ${esc(short$(b.unlock))} in Larry's Tree first` : "research in Larry's Tree first"}</span>` : ''}${b.role ? '<span class="spots">needs the right role</span>' : ''}${b.x && b.x !== 1 ? `<span class="spots">×${esc(b.x)} price</span>` : ''}</li>`).join('')}</ul>` : ''}
+    ${i.barter.length ? i.barter.map((r) => `<div class="barter"><span class="muted small">Barter at the hub's secret door:</span><div class="ings">${r.map(ingredient).join('<span class="plus">+</span>')}</div></div>`).join('') : ''}
+    ${i.routes.map((r) => `<details class="route"><summary>${esc(r.title)}</summary><ol>${r.steps.map((s) => `<li><b>${esc(s.title)}</b> ${esc(s.text)}</li>`).join('')}</ol></details>`).join('')}
+
+    ${node ? `
+      <h3>Clan unlocks <span class="muted">${esc(node.have.length)}/${esc(p.members.length)}</span></h3>
+      <div class="chips">${node.have.map((m) => `<span class="chip">${esc(p.names[m] ?? m)}</span>`).join('') || '<span class="muted">Nobody yet</span>'}</div>
+      <a class="btn ghost small" href="#shipments" id="to-board">SHOW ON THE BOARD</a>` : ''}
+
+    ${h ? `
       <form class="price-form" id="price-form">
-        <label>${esc(SOURCE_LABEL[i.price_source] ?? 'Price')} price used by the hub
-          <input type="number" min="0" step="1" name="price" value="${esc(i.price ?? '')}"></label>
-        <p class="small muted">Synced price ${esc(money(i.seed_price))}${i.overridden ? ` · edited by ${esc(i.override_by ?? 'someone')} ${esc(ago(i.price_override_at))}` : ''}. Clear the box and save to go back to the synced price.</p>
-        <button class="btn">SAVE PRICE</button>
-      </form>`);
-    $('#price-form').onsubmit = async (ev) => {
-      ev.preventDefault();
-      const v = new FormData(ev.target).get('price');
-      try {
-        const r = await api('PUT', `items/${encodeURIComponent(i.id)}`, { price: v === '' ? null : Number(v) });
-        toast(r.reset ? 'Back to the synced price' : 'Price saved');
-        closeDrawer();
-        renderItems();
-      } catch (err) { fail(err); }
-    };
+        <h3>Price used by the hub</h3>
+        <label>${esc(SOURCE_LABEL[h.price_source] ?? 'Price')}
+          <input type="number" min="0" step="1" name="price" value="${esc(h.price ?? '')}"></label>
+        <p class="small muted">Synced price ${esc(money(h.seed_price))}${h.overridden ? ` · edited by ${esc(h.override_by ?? 'someone')} ${esc(ago(h.price_override_at))}` : ''}. Clear the box and save to go back to the synced price.</p>
+        <button class="btn small">SAVE PRICE</button>
+      </form>` : ''}`);
+
+  const d = $('#drawer');
+  d.querySelectorAll('[data-item]').forEach((b) => { b.onclick = () => showItem(b.dataset.item, cat, hubById, p); });
+  const toBoard = $('#to-board');
+  if (toBoard) toBoard.onclick = () => { ship.who = 'clan'; ship.mode = 'board'; ship.focus = { node: id }; };
+  const form = $('#price-form');
+  if (form) form.onsubmit = async (ev) => {
+    ev.preventDefault();
+    const v = new FormData(ev.target).get('price');
+    try {
+      const r = await api('PUT', `items/${encodeURIComponent(id)}`, { price: v === '' ? null : Number(v) });
+      toast(r.reset ? 'Back to the synced price' : 'Price saved');
+      closeDrawer();
+      renderItems();
+    } catch (err) { fail(err); }
   };
 }
 

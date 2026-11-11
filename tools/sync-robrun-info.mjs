@@ -178,6 +178,109 @@ async function productRow(p) {
   return row;
 }
 
+// --- Full item catalog (stats, where to find, how to get) ----------------------------------
+// Five requests: the item list page (groups), the search index (names, types, icons), the English
+// map page and its data file (loot spots, sellers, barters), and the map's item database (stats).
+
+const GROUP_LABEL = { weapons: 'Weapons', ammo: 'Ammo', gear: 'Gear', tools: 'Keys and Tools', vehicles: 'Vehicles', base: 'Base and Plot', valuables: 'Valuables', contraband: 'Contraband' };
+
+const assignment = (js, name) => {
+  const prefix = `window.${name}=`;
+  const t = js.trim();
+  if (!t.startsWith(prefix)) throw new Error(`${name}: unexpected format`);
+  return JSON.parse(t.slice(prefix.length).replace(/;\s*$/, '')); // parsed as JSON, never executed
+};
+
+async function loadCatalog() {
+  const list = await get('/en/items/');
+  const groups = {};
+  for (const m of list.matchAll(/href="\/en\/items\/([a-z0-9_]+)\/"[^>]*?data-g="([a-z]+)"/g)) groups[m[1]] ??= m[2];
+  const search = JSON.parse(await get('/en/search.json'));
+  const mapPage = await get('/en/map/');
+  const dataV = mapPage.match(/src="(data\.js\?v=[^"]+)"/)?.[1];
+  const dbV = mapPage.match(/src="(db\.js\?v=[^"]+)"/)?.[1];
+  if (!dataV || !dbV) throw new Error('map page: could not find data.js or db.js');
+  const atlas = assignment(await get('/en/map/' + dataV), 'ATLAS_DATA');
+  const db = assignment(await get('/en/map/' + dbV), 'ATLAS_DB');
+  return { groups, search, atlas, db };
+}
+
+const secs = (ms) => `${Math.round(ms / 10) / 100} s`;
+// Game text carries Unity rich-text tags such as <color=...>; keep only the words.
+const plain = (s) => String(s ?? '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+
+function catalogRows({ groups, search, atlas, db }) {
+  const meta = Object.fromEntries((atlas.items ?? []).map((i) => [i.id, i]));
+  const points = Object.fromEntries((atlas.points ?? []).map((p) => [p.id, p]));
+  const recipes = Object.fromEntries((atlas.barterRecipes ?? []).map((r) => [r.id, r]));
+  const rarityByColor = Object.fromEntries((atlas.rarities ?? []).map((r) => [String(r.color).toLowerCase(), r.name]));
+  const nameOf = (id) => meta[id]?.name ?? search.find((x) => x.id === id)?.n ?? id;
+  const seen = new Set();
+  const rows = [];
+  for (const s of search) {
+    if (seen.has(s.id)) continue;
+    seen.add(s.id);
+    const m = meta[s.id] ?? {};
+    const d = db.items?.[s.id] ?? {};
+    const acq = atlas.acquisition?.[s.id] ?? {};
+    const stats = [];
+    if (d.weapon) {
+      const w = d.weapon;
+      const r = w.raw ?? {};
+      if (r.maxDamage != null) stats.push(['Damage', r.maxDamage]);
+      if (r.headModifier) stats.push(['Headshot', `×${r.headModifier} = ${Math.round(r.maxDamage * r.headModifier)}`]);
+      if (r.cooldown) stats.push(['Rate of fire', `${Math.round(60000 / r.cooldown)} rounds/min`]);
+      if (w.magazine) stats.push(['Magazine', `${w.magazine} rounds`]);
+      if (r.maxDamageDistance) stats.push(['Full damage range', r.maxDamageDistance]);
+      if (r.reload) stats.push(['Reload', r.reloadMin ? `${secs(r.reload)} (fast ${secs(r.reloadMin)})` : secs(r.reload)]);
+      if (r.aimIn) stats.push(['Aiming', secs(r.aimIn)]);
+      if (r.takeIn) stats.push(['Draw', secs(r.takeIn)]);
+      stats.push(['Fire mode', w.automatic ? 'Auto' : 'Single']);
+      if (w.ammo) stats.push(['Ammo', nameOf(w.ammo)]);
+    }
+    if (d.armor?.segments) stats.push(['Armor segments', d.armor.segments]);
+    if (m.cells) stats.push(['Size', m.cells.join(' × ')]);
+    if (d.stack > 1) stats.push(['Stack', d.stack]);
+
+    const found = {};
+    for (const pid of acq.points ?? []) {
+      const p = points[pid];
+      if (!p) continue;
+      const key = `${p.building ?? p.name ?? 'Unknown spot'}|${p.region ?? ''}`;
+      found[key] = (found[key] ?? 0) + 1;
+    }
+    const buy = [];
+    for (const pu of acq.purchases ?? []) {
+      const cash = (pu.unlock?.ingredients ?? []).find((x) => x.id === 'cash_1')?.amount ?? null;
+      const k = `${pu.vendorName}|${pu.tier}`;
+      if (buy.some((b) => `${b.v}|${b.t}` === k)) continue;
+      buy.push({ v: pu.vendorName, t: pu.tier ?? null, tree: Boolean(pu.vendorTreeLocked), unlock: pu.vendorTreeLocked ? cash : null, role: Boolean(pu.roleRestricted), x: pu.buyPriceModifier ?? 1 });
+    }
+    const barter = (acq.barters ?? []).map((rid) => recipes[rid]).filter(Boolean)
+      .map((r) => r.ingredients.map((g) => (g.id === 'cash_1' ? { cash: g.amount } : { id: g.id, n: g.amount, name: nameOf(g.id) })));
+    const routes = (acq.routes ?? []).map((r) => ({ title: plain(r.title), steps: (r.steps ?? []).map((st) => ({ title: plain(st.title), text: plain(st.text) })) }));
+
+    rows.push({
+      id: s.id,
+      name: clean(m.name ?? s.n),
+      desc: plain(m.description),
+      group: groups[s.id] ?? null,
+      type: s.t ?? '',
+      rarity: m.rarityName ?? rarityByColor[String(s.c ?? '').toLowerCase()] ?? null,
+      price: m.price ?? null,
+      fence: m.sellAvailable && d.sell ? d.sell : null,
+      stats,
+      found: Object.entries(found).map(([k, n]) => { const [where, region] = k.split('|'); return { where, region, n }; }).sort((a, b) => b.n - a.n),
+      buy,
+      barter,
+      routes,
+      alert: atlas.site?.itemAlerts?.[s.id] ? plain(atlas.site.itemAlerts[s.id]) : null,
+      icon: s.i ? '/' + s.i.replace(/^\/+/, '') : null,
+    });
+  }
+  return rows;
+}
+
 // --- Output -------------------------------------------------------------------------------
 
 function psv(rows, header) {
@@ -213,12 +316,25 @@ async function main() {
   await writeFile(join(ROOT, 'public/data/board.json'), JSON.stringify(board) + '\n');
   console.log(`public/data/board.json: ${planner.categories.length} branches, ${planner.nodes.length} node positions`);
 
+  // Full catalog for the Items page.
+  const catalog = catalogRows(await loadCatalog());
+  await writeFile(join(ROOT, 'public/data/items.json'), JSON.stringify({
+    source: `robrun.info catalog and map data, game build ${planner.build}`,
+    build: planner.build,
+    groups: GROUP_LABEL,
+    items: catalog.map(({ icon, ...rest }) => rest),
+  }) + '\n');
+  const withFound = catalog.filter((c) => c.found.length).length;
+  const withBuy = catalog.filter((c) => c.buy.length || c.barter.length).length;
+  console.log(`public/data/items.json: ${catalog.length} items (${withFound} with known spots, ${withBuy} with a seller or barter)`);
+
   if (noImages) return console.log('icons: skipped');
   const jobs = [
     ...planner.nodes.map((n) => [sitePath(n.icon), `items/${n.id}.webp`]),
     ...icons.filter(([, path]) => path).map(([id, path]) => [path, `items/${id}.webp`]),
     ...planner.categories.map((c) => [sitePath(c.art), `branches/${c.id}.webp`]),
     [sitePath(planner.larry.art), 'larry.webp'],
+    ...catalog.filter((c) => c.icon).map((c) => [c.icon, `items/${c.id}.webp`]),
   ];
   const tally = { new: 0, kept: 0, missing: [] };
   for (const [path, file] of jobs) {
