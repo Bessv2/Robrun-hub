@@ -8,6 +8,7 @@ online or not.
 | Page | What it does |
 | --- | --- |
 | **Overview** | Clan metrics: nodes the clan has, average member completion, branch coverage, each member's unlocks, research spent and when they last updated (stale lists stand out), the nodes nobody has yet, and the best business. |
+| **Clan** | Every member who has logged in with Discord, added automatically on their first login. Shows each member's unlocks, research spent, join date and last update. Click a member for their own page: progress by branch and every node they have unlocked (or are missing), with a button to open their tree on the board. |
 | **Shipments** | Larry's Tree drawn like the game's board, with icons. View the whole clan (how many members have each node, and who) or any one member. Members mark their own unlocks; ticking a node also ticks what it requires. Admins can tick on a member's behalf. A list view is there for quick ticking on a phone. Resets when an admin starts the next wipe (the game resets progress when the clan moves to a new state). |
 | **Money** | Ranks the three businesses (Chemical Laboratory, Grow Room, Contraband repack) by $/hour with setup cost and payback, from game prices plus clan-measured model inputs. |
 | **Wipe planner** | Goals for this wipe, optionally linked to a tree node and assigned to a member. Admins start the next wipe here. |
