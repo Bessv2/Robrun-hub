@@ -21,7 +21,7 @@ const icon = (id, cls = '') => `<img class="ic ${cls}" src="${esc(iconUrl(id))}"
 
 let me = null;
 let wipe = null;
-const cache = { board: null, progress: null, catalog: null };
+const cache = { board: null, progress: null, catalog: null, raid: null };
 
 // Images that fail to load (missing icon) are hidden rather than shown broken.
 document.addEventListener('error', (e) => { if (e.target.tagName === 'IMG') e.target.classList.add('noimg'); }, true);
@@ -93,6 +93,11 @@ async function loadProgress() {
   return data;
 }
 
+// A node is ready for a member when they lack it but have everything it requires.
+const hasReqs = (p, n, who) => !n.requires || n.requires.split(',').every((r) => p.byId[r]?.have.includes(who));
+// Nodes opened up by something already unlocked come before starter nodes anyone can research.
+const byProgress = (a, b) => Number(!a.requires) - Number(!b.requires) || (a.tier ?? 0) - (b.tier ?? 0) || (a.research_cost ?? 0) - (b.research_cost ?? 0);
+const readyFor = (p, who) => p.nodes.filter((n) => !n.have.includes(who) && hasReqs(p, n, who)).sort(byProgress);
 const countFor = (p, who) => p.nodes.filter((n) => n.have.includes(who)).length;
 const spentFor = (p, who) => p.nodes.filter((n) => n.have.includes(who)).reduce((s, n) => s + (n.research_cost ?? 0), 0);
 
@@ -192,7 +197,7 @@ $('#menu-btn').onclick = () => {
   $('#menu-btn').setAttribute('aria-expanded', String(open));
 };
 
-const PAGES = { overview: renderOverview, clan: renderClan, shipments: renderShipments, money: renderMoney, items: renderItems, plan: renderPlan, raids: renderRaids };
+const PAGES = { overview: renderOverview, clan: renderClan, shipments: renderShipments, money: renderMoney, items: renderItems, plan: renderPlan, raid: renderRaid, raids: renderRaids };
 
 async function route() {
   if (!me) return;
@@ -266,6 +271,9 @@ async function renderOverview() {
     return { ...c, total: nodes.length, owned: owned.length, show };
   });
   const gaps = p.nodes.filter((n) => !n.have.length).sort((a, b) => (a.tier ?? 0) - (b.tier ?? 0) || (a.research_cost ?? 0) - (b.research_cost ?? 0));
+  // Nodes nobody has yet that at least one member could research right now.
+  const nextUp = gaps.map((n) => ({ n, who: p.members.filter((m) => hasReqs(p, n, m.id)) })).filter((x) => x.who.length).sort((a, b) => byProgress(a.n, b.n));
+  const whoText = (who) => (who.length === p.members.length ? 'anyone can research' : `${who.slice(0, 3).map((m) => m.name).join(', ')}${who.length > 3 ? ` +${who.length - 3}` : ''} can research`);
   const best = income?.businesses?.[0];
 
   view.innerHTML = `
@@ -313,12 +321,13 @@ async function renderOverview() {
 
     <div class="two-col">
       <section>
-        <div class="sec-head"><h2>NOBODY HAS THESE YET</h2><span class="muted small">${esc(gaps.length)} nodes</span></div>
+        <div class="sec-head"><h2>NEXT UP FOR THE CLAN</h2><span class="muted small">${esc(nextUp.length)} the clan can research now · ${esc(gaps.length)} nobody has</span></div>
         <div class="tiles">
-          ${gaps.slice(0, 12).map((n) => `
+          ${nextUp.slice(0, 12).map(({ n, who }) => `
             <a class="tile" href="#shipments" data-node="${esc(n.id)}" style="--r:${esc(RARITY[n.rarity] ?? '#fff')}">
               ${icon(n.id)}<b>${esc(n.name)}</b><small>${esc(label[board.nodes[n.id]?.cat] ?? n.category)} · ${esc(TIER[n.tier] || '—')} · ${esc(short$(n.research_cost))}</small>
-            </a>`).join('') || '<p class="muted">The clan has every node. Nice.</p>'}
+              <small class="who-can">${esc(whoText(who))}</small>
+            </a>`).join('') || `<p class="muted">${gaps.length ? 'Nobody has the prerequisites for the missing nodes yet.' : 'The clan has every node. Nice.'}</p>`}
         </div>
       </section>
       <section>
@@ -448,6 +457,20 @@ async function renderMember(memberId) {
       </div>
     </section>
 
+    ${(() => {
+      const ready = readyFor(p, m.id);
+      return ready.length ? `
+    <section>
+      <div class="sec-head"><h2>READY TO RESEARCH NEXT</h2><span class="muted small">${esc(ready.length)} node${ready.length === 1 ? '' : 's'} with every prerequisite unlocked</span></div>
+      <div class="tiles" id="m-ready">
+        ${ready.slice(0, 18).map((n) => `
+          <button class="tile" data-node="${esc(n.id)}" style="--r:${esc(RARITY[n.rarity] ?? '#fff')}">
+            ${icon(n.id)}<b>${esc(n.name)}</b><small>${esc(branchOf(n))} · ${esc(TIER[n.tier] || '—')} · ${esc(short$(n.research_cost))}</small>
+          </button>`).join('')}
+      </div>
+    </section>` : '';
+    })()}
+
     <section>
       <div class="sec-head">
         <h2>${clanView.memberTab === 'has' ? 'UNLOCKED' : 'NOT UNLOCKED YET'}</h2>
@@ -473,6 +496,8 @@ async function renderMember(memberId) {
 
   $('#m-tab').onclick = (e) => { const b = e.target.closest('[data-tab]'); if (b) { clanView.memberTab = b.dataset.tab; renderMember(memberId); } };
   $('#m-items').onclick = (e) => { const b = e.target.closest('[data-node]'); if (b) showNode(b.dataset.node); };
+  const readyEl = $('#m-ready');
+  if (readyEl) readyEl.onclick = (e) => { const b = e.target.closest('[data-node]'); if (b) showNode(b.dataset.node); };
   $('#m-board').onclick = () => { ship.who = m.id; ship.mode = 'board'; };
   const removeBtn = $('#m-remove');
   if (removeBtn) removeBtn.onclick = async () => {
@@ -1192,6 +1217,195 @@ async function renderPlan() {
       toast('New wipe started');
       renderPlan();
     } catch (err) { fail(err); }
+  };
+}
+
+// ------------------------------------------------------------------------------------------
+// Raid calculator: Decoders needed to hack a base, and what its fuses cost to defend it
+
+const RAID_KEY = 'rr-raid-rows';
+const FUSE_TIERS = ['Uncommon', 'Epic', 'Legendary'];
+const DECODER_SECONDS = 12; // installing one Decoder takes 12 seconds (robrun.info raid guide)
+
+async function loadRaidData() {
+  if (!cache.raid) {
+    const res = await fetch('/data/raid.json');
+    if (!res.ok) throw new Error('Raid data missing: run the sync (npm run sync)');
+    cache.raid = await res.json();
+  }
+  return cache.raid;
+}
+
+function loadRaidRows(raid) {
+  let rows = null;
+  try { rows = JSON.parse(localStorage.getItem(RAID_KEY) || 'null'); } catch {}
+  const names = new Set(raid.structures.map((s) => s.name));
+  rows = Array.isArray(rows) ? rows.filter((r) => names.has(r.s)) : [];
+  if (!rows.length) rows = [{ s: raid.structures.find((s) => s.name === 'Small House')?.name ?? raid.structures[0].name, f: [0, 0, 0] }];
+  return rows;
+}
+const saveRaidRows = (rows) => { try { localStorage.setItem(RAID_KEY, JSON.stringify(rows)); } catch {} };
+
+async function renderRaid() {
+  const [raid, cat] = await Promise.all([loadRaidData(), loadCatalog()]);
+  const item = Object.fromEntries(cat.items.map((i) => [i.id, i]));
+  const byName = Object.fromEntries(raid.structures.map((s) => [s.name, s]));
+  const rows = loadRaidRows(raid);
+  const fusePts = raid.fuses.map((f) => f.points);
+  const decPts = raid.decoders.map((d) => d.points);
+  const priceOf = (id) => item[id]?.price ?? null;
+  const epicBarter = item[raid.decoders[1].id]?.barter?.find((r) => r.some((g) => g.id === raid.decoders[0].id));
+  const epicFromUncommon = epicBarter ? epicBarter.reduce((s, g) => s + (g.cash ?? (g.id === raid.decoders[0].id ? g.n * (priceOf(g.id) ?? 0) : 0)), 0) : null;
+  const mins = (s) => (s < 60 ? `${s} s` : `${Math.round((s / 60) * 10) / 10} min`);
+
+  const defense = (r) => {
+    const s = byName[r.s];
+    return s.base + r.f.reduce((sum, n, i) => sum + n * fusePts[i], 0);
+  };
+  const decoders = (def) => decPts.map((p) => Math.ceil(def / p));
+
+  view.innerHTML = `
+    ${hero('TOOLS / RAIDS', 'RAID CALCULATOR', 'How many Decoders it takes to hack a base, and what its Electronic Fuses cost the defender. Add each structure in the base and set the fuses in it.')}
+    <section>
+      <div class="sec-head"><h2>THE BASE</h2>
+        <form class="row" id="raid-add">
+          <select name="s" aria-label="Structure to add">${raid.structures.map((s) => `<option>${esc(s.name)}</option>`).join('')}</select>
+          <button class="btn small">ADD STRUCTURE</button>
+        </form>
+      </div>
+      <div class="raid-rows" id="raid-rows"></div>
+    </section>
+    <section id="raid-total"></section>
+    <section>
+      <div class="sec-head"><h2>GOOD TO KNOW</h2></div>
+      <ul class="card small raid-notes">
+        <li>Each Decoder takes ${DECODER_SECONDS} seconds to install and is used up. A full hack gives limited access to the building and puts a raid lock on the base.</li>
+        <li>Decoders do not open safes or security cabinets inside: those need a Master Key.</li>
+        ${epicBarter ? `<li>Epic Decoders come from barter at the hub's secret door: ${epicBarter.map((g) => (g.cash != null ? esc(money(g.cash)) : `${esc(g.n)} × ${esc(g.name)}`)).join(' + ')}.</li>` : ''}
+        <li>Each structure also has ${esc(raid.alarmSlots)} Alarm System slots. Alarms add no defense; they warn the owner that a hack has started.</li>
+        <li>Fuses are not destroyed by a hack: the owner repairs the panel and the defense comes back.</li>
+      </ul>
+    </section>
+    <section>
+      <div class="sec-head"><h2>EVERY STRUCTURE</h2><span class="muted small">Decoders for a full hack, with no fuses and with every slot legendary</span></div>
+      <div class="card flush table-wrap">
+        <table class="raid-ref">
+          <thead><tr><th>Structure</th><th>Base</th><th>Fuse slots</th><th>Max defense</th>
+            ${FUSE_TIERS.map((t, i) => `<th class="nowrap">${esc(t)} (−${esc(decPts[i])})</th>`).join('')}</tr></thead>
+          <tbody>
+            ${raid.structures.map((s) => `
+              <tr><td><span class="who-cell">${s.id ? icon(s.id, 'sm') : ''}<b>${esc(s.name)}</b></span></td><td>${esc(s.base)}</td><td>${esc(s.slots)}</td><td>${esc(s.max)}</td>
+                ${decPts.map((p) => `<td class="nowrap">${esc(Math.ceil(s.base / p))} – ${esc(Math.ceil(s.max / p))}</td>`).join('')}</tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      <p class="muted small">Structure data from robrun.info's raid guide, game build ${esc(raid.source.match(/build (\d+)/)?.[1] ?? '')}.</p>
+    </section>`;
+
+  const drawRows = () => {
+    $('#raid-rows').innerHTML = rows.map((r, idx) => {
+      const s = byName[r.s];
+      const used = r.f.reduce((a, b) => a + b, 0);
+      const def = defense(r);
+      const d = decoders(def);
+      return `
+        <article class="card raid-row" data-i="${idx}">
+          <header class="row spread">
+            <span class="who-cell">${s.id ? icon(s.id, 'md') : ''}<b class="rr-name">${esc(s.name)}</b></span>
+            <button class="link danger" data-del title="Remove this structure" aria-label="Remove ${esc(s.name)}">✕</button>
+          </header>
+          <div class="rr-fuses">
+            ${FUSE_TIERS.map((t, i) => `
+              <label class="rr-fuse" style="--r:${RARITY[t]}">${icon(raid.fuses[i].id, 'sm')}<span>${esc(t)} fuse <small>+${esc(fusePts[i])}</small></span>
+                <input type="number" min="0" max="${esc(s.slots)}" step="1" value="${esc(r.f[i])}" data-f="${i}" aria-label="${esc(t)} fuses in ${esc(s.name)}"></label>`).join('')}
+          </div>
+          <p class="small ${used > s.slots ? 'bad' : 'muted'}">${esc(used)} of ${esc(s.slots)} fuse slots used${used > s.slots ? ': more fuses than slots' : ''}.
+            <button class="link" data-preset="none">No fuses</button> · <button class="link" data-preset="max">Fill with legendary</button></p>
+          <div class="rr-out">
+            <div class="rr-def"><b>${esc(def)}</b><span>defense of ${esc(s.max)} max</span><i class="bar" style="--p:${pct(def, s.max)}%"></i></div>
+            <div class="rr-dec">
+              ${d.map((n, i) => `<span class="dec" style="--r:${RARITY[FUSE_TIERS[i]]}">${icon(raid.decoders[i].id, 'sm')}<b>${esc(n)}</b><small>${esc(FUSE_TIERS[i].toLowerCase())}</small></span>`).join('')}
+            </div>
+          </div>
+        </article>`;
+    }).join('') || '<p class="muted card pad">Add a structure to start.</p>';
+    drawTotal();
+  };
+
+  const drawTotal = () => {
+    const defs = rows.map(defense);
+    const total = defs.reduce((a, b) => a + b, 0);
+    // Decoders are applied per structure, so round up per structure, not on the total.
+    const need = decPts.map((p) => defs.reduce((sum, d) => sum + Math.ceil(d / p), 0));
+    const decValue = [priceOf(raid.decoders[0].id), epicFromUncommon ?? priceOf(raid.decoders[1].id), priceOf(raid.decoders[2].id)];
+    const fuseCount = [0, 1, 2].map((i) => rows.reduce((s, r) => s + r.f[i], 0));
+    const fuseValue = fuseCount.reduce((s, n, i) => s + n * (priceOf(raid.fuses[i].id) ?? 0), 0);
+    const toMax = rows.reduce((s, r) => {
+      const st = byName[r.s];
+      const free = Math.max(0, st.slots - r.f.reduce((a, b) => a + b, 0));
+      return s + free * (priceOf(raid.fuses[2].id) ?? 0);
+    }, 0);
+    $('#raid-total').innerHTML = `
+      <div class="sec-head"><h2>TOTAL</h2><span class="muted small">${esc(rows.length)} structure${rows.length === 1 ? '' : 's'} · total defense ${esc(total)}</span></div>
+      <div class="raid-total">
+        <div class="card">
+          <h3>ATTACKING: DECODERS NEEDED</h3>
+          <table class="stats">
+            <tr><th>Decoder</th><th>How many</th><th>Install time</th><th>Value</th></tr>
+            ${need.map((n, i) => `<tr><td><span class="who-cell">${icon(raid.decoders[i].id, 'sm')}${esc(FUSE_TIERS[i])} (−${esc(decPts[i])})</span></td><td><b>${esc(n)}</b></td><td>${esc(mins(n * DECODER_SECONDS))}</td><td>${decValue[i] != null ? esc(short$(n * decValue[i])) : '—'}${i === 1 && epicFromUncommon != null ? '<small class="muted"> via barter</small>' : ''}</td></tr>`).join('')}
+          </table>
+          <p class="small muted">Use one kind per structure, or mix: every Decoder counts by its own value.</p>
+        </div>
+        <div class="card">
+          <h3>DEFENDING: FUSES</h3>
+          <dl class="facts">
+            <div><dt>Fuses installed</dt><dd>${esc(fuseCount.reduce((a, b) => a + b, 0))}</dd></div>
+            <div><dt>Their value</dt><dd>${esc(money(fuseValue))}</dd></div>
+            <div><dt>Fill every free slot with legendary</dt><dd>${esc(money(toMax))} more</dd></div>
+          </dl>
+          <p class="small muted">Fuse prices are the Trade Laptop prices; each tier must be researched in Larry's Tree first.</p>
+        </div>
+      </div>`;
+  };
+
+  drawRows();
+  $('#raid-add').onsubmit = (e) => {
+    e.preventDefault();
+    rows.push({ s: new FormData(e.target).get('s'), f: [0, 0, 0] });
+    saveRaidRows(rows);
+    drawRows();
+  };
+  $('#raid-rows').oninput = (e) => {
+    const inp = e.target.closest('[data-f]');
+    if (!inp) return;
+    const r = rows[Number(e.target.closest('[data-i]').dataset.i)];
+    r.f[Number(inp.dataset.f)] = Math.max(0, Math.min(999, Math.floor(Number(inp.value) || 0)));
+    saveRaidRows(rows);
+    // Update this card's numbers without rebuilding it, so typing keeps focus.
+    const card = e.target.closest('[data-i]');
+    const s = byName[r.s];
+    const used = r.f.reduce((a, b) => a + b, 0);
+    const def = defense(r);
+    card.querySelector('.rr-def b').textContent = def;
+    card.querySelector('.rr-def .bar').style.setProperty('--p', `${pct(def, s.max)}%`);
+    card.querySelectorAll('.dec b').forEach((b, i) => { b.textContent = decoders(def)[i]; });
+    const note = card.querySelector('p.small');
+    note.classList.toggle('bad', used > s.slots);
+    note.classList.toggle('muted', used <= s.slots);
+    note.firstChild.textContent = `${used} of ${s.slots} fuse slots used${used > s.slots ? ': more fuses than slots' : ''}. `;
+    drawTotal();
+  };
+  $('#raid-rows').onclick = (e) => {
+    const card = e.target.closest('[data-i]');
+    if (!card) return;
+    const i = Number(card.dataset.i);
+    if (e.target.closest('[data-del]')) rows.splice(i, 1);
+    else if (e.target.closest('[data-preset]')) {
+      const s = byName[rows[i].s];
+      rows[i].f = e.target.closest('[data-preset]').dataset.preset === 'max' ? [0, 0, s.slots] : [0, 0, 0];
+    } else return;
+    saveRaidRows(rows);
+    drawRows();
   };
 }
 

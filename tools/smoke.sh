@@ -43,6 +43,7 @@ check GET  /api/me
 check GET  /api/progress
 check GET  /data/board.json
 check GET  /data/items.json
+check GET  /data/raid.json
 check GET  /img/items/meth_lab_1.webp
 check PUT  /api/progress '{"item_id":"meth_lab_1","done":true}'
 check PUT  /api/progress '{"item_id":"meth_lab_1","done":false}'

@@ -7,12 +7,13 @@ online or not.
 
 | Page | What it does |
 | --- | --- |
-| **Overview** | Clan metrics: nodes the clan has, average member completion, branch coverage, each member's unlocks, research spent and when they last updated (stale lists stand out), the nodes nobody has yet, and the best business. |
-| **Clan** | Every member who has logged in with Discord, added automatically on their first login. Shows each member's unlocks, research spent, join date and last update. Click a member for their own page: progress by branch and every node they have unlocked (or are missing), with a button to open their tree on the board. Admins can remove a member there (their unlocks are deleted; someone still in the Discord server can log in again and is added back empty). |
+| **Overview** | Clan metrics: nodes the clan has, average member completion, branch coverage, each member's unlocks, research spent and when they last updated (stale lists stand out), the next nodes the clan can research (nobody has them yet, but someone has the prerequisites, and who), and the best business. |
+| **Clan** | Every member who has logged in with Discord, added automatically on their first login. Shows each member's unlocks, research spent, join date and last update. Click a member for their own page: progress by branch and every node they have unlocked (or are missing), with a button to open their tree on the board, and the nodes they can research next (every prerequisite unlocked). Admins can remove a member there (their unlocks are deleted; someone still in the Discord server can log in again and is added back empty). |
 | **Shipments** | Larry's Tree drawn like the game's board, with icons. View the whole clan (how many members have each node, and who) or any one member. Members mark their own unlocks; ticking a node also ticks what it requires. Admins can tick on a member's behalf. A list view is there for quick ticking on a phone. Resets when an admin starts the next wipe (the game resets progress when the clan moves to a new state). |
 | **Money** | Ranks the three businesses (Chemical Laboratory, Grow Room, Contraband repack) by $/hour with setup cost and payback. Below it, "Help check the numbers": one card per thing the model needs from the game, as a plain question with how to check it. Anyone can type what they saw and save it for the clan. |
 | **Wipe planner** | Goals for this wipe, optionally linked to a tree node and assigned to a member. Admins start the next wipe here. |
 | **Items** | All 547 items in the game with icons. Click one for its stats (weapons: damage, fire rate, magazine, reload and more), where it is found on the map, who sells it and barter recipes, which clan members have it if it is in Larry's Tree, and (for the items the money model uses) the price the hub uses, which members can correct. |
+| **Raid calculator** | Add the structures in a base and the Electronic Fuses in each: shows each structure's defense and how many Decoders of each tier it takes to hack it, the install time and value of those Decoders, and what the fuses cost the defender. Includes a table of every structure. Your base is remembered in your browser. |
 | **Raid alerts** | Send an alert that posts in the clan Discord channel with an @here ping. Scripts can send one through the ingest hook. |
 
 Stack: Cloudflare Pages (static `public/`), one Pages Function (`functions/api/[[path]].js`) and a
@@ -85,6 +86,7 @@ Never set `DEV_LOGIN` in Cloudflare. `curl https://<your-site>/api/auth/dev` mus
 | `data/model-inputs.psv` | Starting values for the Money model | Hand, then the site |
 | `public/data/board.json` | robrun.info planner layout: node positions, branches, Larry | `npm run sync` |
 | `public/data/items.json` | robrun.info catalog and map data: all items, stats, loot spots, sellers, barters | `npm run sync` |
+| `public/data/raid.json` | robrun.info raid guide: structure defense, fuse slots, Decoder and fuse values | `npm run sync` |
 | `public/img/` | Item, branch and Larry icons: the game's art, re-hosted by robrun.info | `npm run sync` (downloads only missing files; `--no-images` skips) |
 | `public/fonts/` | Fira Sans Extra Condensed and Roboto Condensed (SIL OFL, see `LICENSE.txt`) | Copied once from `@fontsource` |
 

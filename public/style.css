@@ -117,7 +117,8 @@ nav a.on { background: var(--card-hi); color: var(--accent); border-left-color: 
 nav .count { font: 400 12px/1 var(--body); color: var(--muted); font-style: normal; }
 .side-foot { margin-top: auto; font-size: 11px; color: var(--muted); }
 
-.main { min-width: 0; padding: 28px 36px 60px; display: grid; gap: 28px; align-content: start; max-width: 1400px; }
+.main { min-width: 0; padding: 28px 36px 60px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; align-content: start; max-width: 1400px; }
+.main > * { min-width: 0; }
 
 /* Page header ------------------------------------------------------------------------------ */
 .hero { position: relative; background: var(--panel); border-left: 4px solid var(--accent); padding: 26px 30px; display: grid; gap: 4px; }
@@ -254,6 +255,30 @@ table.stats td { padding: 5px 8px; font-weight: 700; }
 .plus { color: var(--muted); }
 .route { margin: 6px 0; background: var(--sunk); padding: 8px 10px; }
 .route ol { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 6px; font-size: 14px; }
+
+/* Raid calculator ------------------------------------------------------------------------ */
+.ic.md { width: 44px; height: 44px; flex: none; }
+.raid-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 10px; }
+.raid-row { display: grid; gap: 10px; }
+.rr-name { font: italic 900 22px/1 var(--display); text-transform: uppercase; }
+.rr-fuses { display: grid; gap: 6px; }
+.rr-fuse { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding: 4px 8px; background: var(--sunk); border-left: 3px solid var(--r); }
+.rr-fuse small { color: var(--muted); }
+.rr-fuse input { width: 5em; }
+.rr-out { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+.rr-def { display: grid; gap: 2px; }
+.rr-def b { font: italic 900 34px/1 var(--display); color: var(--accent); }
+.rr-def span { color: var(--muted); font-size: 13px; }
+.rr-def .bar { margin-top: 6px; }
+.rr-dec { display: flex; gap: 6px; }
+.dec { display: grid; justify-items: center; padding: 4px 8px; background: var(--sunk); border-bottom: 3px solid var(--r); min-width: 58px; }
+.dec b { font: italic 900 22px/1 var(--display); }
+.dec small { color: var(--muted); font-size: 11px; }
+.raid-total { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }
+.raid-total th { font: italic 800 12px/1.2 var(--display); letter-spacing: 1px; text-transform: uppercase; color: var(--muted); width: auto; }
+.raid-notes { margin: 0; padding: 14px 18px 14px 34px; display: grid; gap: 6px; }
+.raid-ref td, .raid-ref th { white-space: nowrap; }
+.who-can { color: var(--accent) !important; }
 
 /* Shipments -------------------------------------------------------------------------------- */
 body[data-page="shipments"] .main { max-width: none; gap: 14px; }
