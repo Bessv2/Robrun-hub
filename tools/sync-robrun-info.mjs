@@ -67,6 +67,8 @@ const saveDir = opt('--save');
 const noImages = args.includes('--no-images') || Boolean(fromDir);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// robrun.info's data files start with a /*! ... */ notice; drop leading comments before parsing.
+const stripLeadingComments = (js) => js.replace(/^\s*(?:\/\*[\s\S]*?\*\/\s*|\/\/[^\n]*\n\s*)*/, '');
 let fetched = 0;
 
 async function get(path) {
@@ -104,7 +106,7 @@ async function loadPlanner() {
   const page = await get('/en/planner/');
   const m = page.match(/src="(data\.js\?v=[^"]+)"/);
   if (!m) throw new Error('planner page: could not find data.js script tag');
-  const js = (await get('/en/planner/' + m[1])).trim();
+  const js = stripLeadingComments(await get('/en/planner/' + m[1])).trim();
   const prefix = 'window.PLANNER_DATA=';
   if (!js.startsWith(prefix)) throw new Error('planner data.js: unexpected format (no window.PLANNER_DATA=)');
   // Parsed as JSON, never executed.
@@ -186,7 +188,7 @@ const GROUP_LABEL = { weapons: 'Weapons', ammo: 'Ammo', gear: 'Gear', tools: 'Ke
 
 const assignment = (js, name) => {
   const prefix = `window.${name}=`;
-  const t = js.trim();
+  const t = stripLeadingComments(js).trim();
   if (!t.startsWith(prefix)) throw new Error(`${name}: unexpected format`);
   return JSON.parse(t.slice(prefix.length).replace(/;\s*$/, '')); // parsed as JSON, never executed
 };
@@ -281,6 +283,28 @@ function catalogRows({ groups, search, atlas, db }) {
   return rows;
 }
 
+// --- Raid guide: structure defense, decoder and fuse values --------------------------------
+
+async function loadRaid(treeRows) {
+  const t = pageText(await get('/en/guides/raid/'));
+  const idByName = {};
+  for (const r of treeRows) idByName[r.name] ??= r.id;
+  const structures = [...t.matchAll(/([A-Z][A-Za-z ]+?) Base protection (\d+) Fuse slots (\d+) Max defense (\d+)/g)]
+    .map((m) => ({ name: m[1].trim(), id: idByName[m[1].trim()] ?? null, base: Number(m[2]), slots: Number(m[3]), max: Number(m[4]) }));
+  const removes = [...t.matchAll(/Decoder Removes (\d+) defense points?/g)].map((m) => Number(m[1]));
+  const adds = [...t.matchAll(/Electronic Fuse Adds (\d+) defense points?/g)].map((m) => Number(m[1]));
+  if (structures.length < 5 || removes.length < 3 || adds.length < 3) throw new Error('raid guide: unexpected layout');
+  for (const s of structures) {
+    if (s.base + s.slots * adds[2] !== s.max) throw new Error(`raid guide: ${s.name} does not add up`);
+  }
+  return {
+    structures,
+    decoders: ['decoder_1', 'decoder_2', 'decoder_3'].map((id, i) => ({ id, points: removes[i] })),
+    fuses: ['defense_module_1', 'defense_module_2', 'defense_module_3'].map((id, i) => ({ id, points: adds[i] })),
+    alarmSlots: Number(t.match(/has (\d+) slots for Alarm Systems/)?.[1] ?? 3),
+  };
+}
+
 // --- Output -------------------------------------------------------------------------------
 
 function psv(rows, header) {
@@ -315,6 +339,11 @@ async function main() {
   await mkdir(join(ROOT, 'public/data'), { recursive: true });
   await writeFile(join(ROOT, 'public/data/board.json'), JSON.stringify(board) + '\n');
   console.log(`public/data/board.json: ${planner.categories.length} branches, ${planner.nodes.length} node positions`);
+
+  // Raid calculator data.
+  const raid = await loadRaid(tree);
+  await writeFile(join(ROOT, 'public/data/raid.json'), JSON.stringify({ source: `robrun.info raid guide, game build ${planner.build}`, ...raid }) + '\n');
+  console.log(`public/data/raid.json: ${raid.structures.length} structures, decoders ${raid.decoders.map((d) => d.points).join('/')}, fuses ${raid.fuses.map((f) => f.points).join('/')}`);
 
   // Full catalog for the Items page.
   const catalog = catalogRows(await loadCatalog());
